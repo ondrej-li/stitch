@@ -1,0 +1,84 @@
+name: Stitch
+
+options:
+  bundleIdPrefix: com.ondrejli
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Manual ad-hoc signing keeps local builds working without a developer team.
+    # Set a team and switch to Automatic if you want to sign for a device or distribute.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+
+packages:
+  StitchKit:
+    path: StitchKit
+
+targets:
+  Stitch:
+    type: application
+    # One target, two destinations: the same SwiftUI source ships on macOS and iOS/iPadOS.
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Stitch
+    dependencies:
+      - package: StitchKit
+        product: StitchKit
+    info:
+      path: Stitch/Resources/Info.plist
+      properties:
+        CFBundleName: Stitch
+        CFBundleDisplayName: Stitch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.graphics-design
+        ITSAppUsesNonExemptEncryption: false
+        NSHighResolutionCapable: true
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_NAME: Stitch
+        PRODUCT_BUNDLE_IDENTIFIER: com.ondrejli.stitch
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Overrides the "iPhone Developer" identity XcodeGen applies to iOS-destined
+        # targets, which needs a team. Set your team here for device builds.
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        SUPPORTS_MACCATALYST: NO
+        COMBINE_HIDPI_IMAGES: YES
+
+schemes:
+  Stitch:
+    build:
+      targets:
+        Stitch: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

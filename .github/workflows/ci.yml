@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kit-tests:
+    name: StitchKit tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Run unit tests
+        working-directory: StitchKit
+        run: swift test
+
+  app:
+    name: Build app (macOS + iOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for macOS
+        run: |
+          xcodebuild \
+            -project Stitch.xcodeproj \
+            -scheme Stitch \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -derivedDataPath .build/DerivedData \
+            build
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild \
+            -project Stitch.xcodeproj \
+            -scheme Stitch \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            -derivedDataPath .build/DerivedData \
+            build

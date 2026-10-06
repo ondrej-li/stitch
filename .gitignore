@@ -60,3 +60,9 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Stitch
+# The Xcode project and Info.plist are generated from project.yml by XcodeGen.
+Stitch.xcodeproj/
+Stitch/Resources/Info.plist
+DerivedData/
