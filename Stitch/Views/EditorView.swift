@@ -32,7 +32,7 @@ struct EditorView: View {
                     Divider()
                 }
 
-                WorkspaceView(onOpen: { isImporting = true })
+                WorkspaceView()
             }
         }
         .background(Theme.canvasBackdrop)
@@ -61,15 +61,19 @@ struct EditorView: View {
         }
         .onChange(of: model.importRequestCount) { _, _ in isImporting = true }
         .onChange(of: model.exportRequestCount) { _, _ in prepareExport() }
-        .onAppear(perform: loadClipboardOnLaunch)
+        .onAppear(perform: startSession)
     }
 
     // MARK: - Image intake
 
-    /// The clipboard is the default source, so a fresh launch picks it up automatically.
-    private func loadClipboardOnLaunch() {
-        guard !model.hasImage, let image = ImagePasteboard.readImage() else { return }
-        model.load(image: image)
+    /// The clipboard is the default source: a fresh launch picks up whatever image is on it,
+    /// and otherwise starts a blank canvas so the window is immediately drawable.
+    private func startSession() {
+        if let image = ImagePasteboard.readImage() {
+            model.load(image: image)
+        } else {
+            model.loadBlankCanvas()
+        }
     }
 
     private func pasteFromClipboard() {

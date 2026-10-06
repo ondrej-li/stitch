@@ -3,23 +3,27 @@ import Foundation
 
 /// Owns the pixel surface and the undo history for one image.
 ///
-/// This is the raster compositor at the heart of the Skitch-style editing model:
-/// annotations are drawn straight into the canvas and the change is recorded as a
-/// dirty-rect patch. Preview and commit share one draw path, so a highlighter or
-/// eraser stroke looks the same while dragging as it does once baked in.
+/// This is the raster compositor at the heart of the Skitch-style editing model: annotations
+/// are drawn straight into the canvas and the change is recorded as a dirty-rect patch.
 @MainActor
 public final class ImageDocument {
-    public struct Preview {
+    /// A live preview of an in-flight annotation: a transparent image covering only the
+    /// annotation's own bounds, plus the blend mode needed to composite it.
+    ///
+    /// Deliberately *not* a copy of the backdrop. Copying the covered pixels produced a visible
+    /// rectangle and made each frame expensive; a transparent overlay composites seamlessly and
+    /// stays cheap because it is clipped to the annotation.
+    public struct AnnotationPreview {
         public let image: CGImage
         /// Canvas-space rect the preview image covers.
         public let rect: CGRect
+        public let blendMode: PreviewBlendMode
     }
 
     public private(set) var canvas: CanvasBitmap
     public private(set) var history: History
     public var alphaMode: AlphaMode = .keepAlpha
 
-    private var previewBuffer: CGContext?
     private var cachedImage: CGImage?
     private var cacheIsStale = true
 
@@ -60,38 +64,32 @@ public final class ImageDocument {
         return true
     }
 
-    /// Renders an annotation over a copy of the surrounding pixels without committing it.
+    /// Renders just the annotation, transparent elsewhere, clipped to the bounds it covers.
     ///
-    /// Compositing against the real backdrop is what makes the highlighter's multiply
-    /// blend and the eraser's clear blend preview correctly.
-    public func preview(_ annotation: Annotation) -> Preview? {
+    /// This is what makes the drag look seamless: nothing is copied from the backdrop, so
+    /// there is no patch edge, no opaque rectangle and no re-upload of the whole image each
+    /// frame. The blend mode tells the view how to composite it.
+    public func preview(_ annotation: Annotation) -> AnnotationPreview? {
         let rect = Geometry.integralBounds(Renderer.bounds(of: annotation)).intersection(bounds)
-        guard !rect.isEmpty, let base = image else { return nil }
-        guard let context = makePreviewBuffer() else { return nil }
+        guard !rect.isEmpty else { return nil }
 
-        context.clear(CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height))
-        ImageDrawing.drawUpright(base, in: bounds, context: context)
+        let width = Int(rect.width)
+        let height = Int(rect.height)
+        guard let context = BitmapContextFactory.make(
+            width: width,
+            height: height,
+            colorSpace: canvas.context.colorSpace,
+            flipped: true
+        ) else {
+            return nil
+        }
+
+        // Shift the canvas coordinate system so the annotation lands in this small context.
+        context.translateBy(x: -rect.minX, y: -rect.minY)
         Renderer.draw(annotation, in: context)
 
-        guard let full = context.makeImage(), let cropped = full.cropping(to: rect) else { return nil }
-        return Preview(image: cropped, rect: rect)
-    }
-
-    private func makePreviewBuffer() -> CGContext? {
-        if let previewBuffer,
-           previewBuffer.width == canvas.width,
-           previewBuffer.height == canvas.height {
-            return previewBuffer
-        }
-        let context = BitmapContextFactory.make(
-            width: canvas.width,
-            height: canvas.height,
-            colorSpace: canvas.context.colorSpace,
-            flipped: true,
-            bytesPerRow: canvas.width * CanvasBitmap.bytesPerPixel
-        )
-        previewBuffer = context
-        return context
+        guard let image = context.makeImage() else { return nil }
+        return AnnotationPreview(image: image, rect: rect, blendMode: annotation.previewBlendMode)
     }
 
     // MARK: - History
@@ -144,6 +142,18 @@ public final class ImageDocument {
         invalidate()
     }
 
+    /// Wipes the canvas back to a blank white sheet, as one undoable step.
+    @discardableResult
+    public func clearCanvas() -> Bool {
+        guard let before = canvas.makeImage() else { return false }
+        guard let blank = ImageOps.blank(size: canvas.size) else { return false }
+
+        canvas.replace(with: blank, scale: canvas.scale)
+        history.push(.canvas(before: before, after: blank))
+        invalidate()
+        return true
+    }
+
     // MARK: - Export
 
     public func pngData() -> Data? {
@@ -153,6 +163,5 @@ public final class ImageDocument {
 
     private func invalidate() {
         cacheIsStale = true
-        previewBuffer = nil
     }
 }

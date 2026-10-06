@@ -48,6 +48,12 @@ struct ActionBarView: View {
             .disabled(!model.canRedo)
             .help("Redo")
 
+            Button { model.clearCanvas() } label: {
+                Label("Clear", systemImage: "trash")
+            }
+            .disabled(!model.hasImage || model.isCropping)
+            .help("Clear the canvas back to a blank sheet")
+
             Spacer(minLength: 8)
 
             zoomControls

@@ -9,8 +9,6 @@ import AppKit
 struct WorkspaceView: View {
     @Environment(EditorModel.self) private var model
 
-    let onOpen: () -> Void
-
     private static let canvasSpace = "stitch.canvas"
 
     @State private var isGestureActive = false
@@ -20,14 +18,10 @@ struct WorkspaceView: View {
             ZStack {
                 Theme.canvasBackdrop
 
-                if model.hasImage {
-                    if model.isCropping {
-                        CropStageView()
-                    } else {
-                        drawingStage
-                    }
+                if model.isCropping {
+                    CropStageView()
                 } else {
-                    EmptyStateView(onPaste: pasteFromClipboard, onOpen: onOpen)
+                    drawingStage
                 }
             }
             .onAppear { model.updateViewport(geometry.size) }
@@ -46,14 +40,21 @@ struct WorkspaceView: View {
                 CheckerboardView()
                     .frame(width: scaled.width, height: scaled.height)
 
-                if let image = model.displayedImage {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: scaled.width, height: scaled.height)
-                }
+                // The image and the live preview form their own compositing group, so the
+                // eraser's destination-out reveals the checkerboard behind the image rather
+                // than punching a hole straight through to the window.
+                ZStack(alignment: .topLeading) {
+                    if let image = model.displayedImage {
+                        Image(decorative: image, scale: 1)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: scaled.width, height: scaled.height)
+                    }
 
-                previewLayer(transform: transform)
+                    previewLayer(transform: transform)
+                }
+                .compositingGroup()
+
                 TextSessionOverlay(transform: transform)
             }
             .frame(width: scaled.width, height: scaled.height)
@@ -61,12 +62,19 @@ struct WorkspaceView: View {
             .shadow(color: .black.opacity(0.5), radius: 10)
             .coordinateSpace(name: Self.canvasSpace)
             .gesture(drawingGesture)
+            .onContinuousHover(coordinateSpace: .named(Self.canvasSpace)) { phase in
+                guard case let .active(location) = phase else { return }
+                model.updateArrowHover(to: canvasPoint(location))
+            }
+            .modifier(EscapeCancelsArrow { model.cancelPendingArrow() })
         }
         .defaultScrollAnchor(.center)
     }
 
-    /// Renders the in-flight annotation over a copy of the pixels it covers, so the
-    /// highlighter and eraser preview exactly what they will commit.
+    /// Draws the in-flight annotation as a transparent overlay.
+    ///
+    /// Nothing is copied from the backdrop, so the drag has no patch edge or helper rectangle,
+    /// and the small overlay keeps it fluid. The blend mode reproduces what the commit will do.
     @ViewBuilder
     private func previewLayer(transform: CanvasTransform) -> some View {
         if let preview = model.preview {
@@ -76,6 +84,7 @@ struct WorkspaceView: View {
                 .interpolation(.high)
                 .frame(width: rect.width, height: rect.height)
                 .offset(x: rect.minX, y: rect.minY)
+                .blendMode(preview.blendMode.swiftUI)
                 .allowsHitTesting(false)
         }
     }
@@ -121,11 +130,6 @@ struct WorkspaceView: View {
         #else
         false
         #endif
-    }
-
-    private func pasteFromClipboard() {
-        guard let image = ImagePasteboard.readImage() else { return }
-        model.load(image: image)
     }
 }
 
@@ -231,5 +235,30 @@ struct TextSessionOverlay: View {
     private func commit() {
         model.updateText(draft)
         model.commitText()
+    }
+}
+
+extension PreviewBlendMode {
+    /// The SwiftUI equivalent, so a preview composites exactly as the commit will.
+    var swiftUI: BlendMode {
+        switch self {
+        case .normal: .normal
+        case .multiply: .multiply
+        case .destinationOut: .destinationOut
+        }
+    }
+}
+
+/// Escape abandons an anchored arrow on macOS. The modifier is unavailable on iOS, where
+/// switching tools or tapping the same tool again does the same job.
+private struct EscapeCancelsArrow: ViewModifier {
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.onExitCommand(perform: action)
+        #else
+        content
+        #endif
     }
 }

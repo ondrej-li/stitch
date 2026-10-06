@@ -19,9 +19,18 @@ public final class EditorModel {
     }
 
     public private(set) var document: ImageDocument?
-    public private(set) var preview: ImageDocument.Preview?
+    public private(set) var preview: ImageDocument.AnnotationPreview?
     public private(set) var cropSession: CropSession?
     public private(set) var textSession: TextSession?
+
+    /// A two-click arrow in progress: the tail is anchored by the first click and the head
+    /// follows the pointer until the next click.
+    public struct PendingArrow: Equatable, Sendable {
+        public var tail: CGPoint
+        public var head: CGPoint
+    }
+
+    public private(set) var pendingArrow: PendingArrow?
 
     /// What the canvas should draw: the staged crop preview when cropping, otherwise the
     /// committed surface.
@@ -31,6 +40,17 @@ public final class EditorModel {
     /// system needs a property to watch.
     public private(set) var displayedImage: CGImage?
     public private(set) var displayedSize: CGSize = .zero
+
+    /// Command availability is stored and refreshed by `bump()` rather than computed.
+    ///
+    /// It has to be: the history lives inside `ImageDocument`, which is not observable, so a
+    /// computed `canUndo` would never tell the menu bar or the action bar to re-enable — the
+    /// Undo item would stay greyed out forever.
+    public private(set) var hasImage = false
+    public private(set) var canUndo = false
+    public private(set) var canRedo = false
+    public private(set) var canExport = false
+    public private(set) var canvasSize: CGSize = .zero
 
     public var activeTool: ToolID = .arrow
     public var stampContent: StampContent = .badge(.cross)
@@ -57,15 +77,11 @@ public final class EditorModel {
 
     // MARK: - Document state
 
-    public var hasImage: Bool { document != nil }
-    public var canvasSize: CGSize { document?.pixelSize ?? .zero }
-    public var canvasImage: CGImage? { document?.image }
-
     public var isCropping: Bool { cropSession != nil }
     public var isEditingText: Bool { textSession != nil }
-    public var canExport: Bool { document != nil && cropSession == nil }
-    public var canUndo: Bool { cropSession == nil && (document?.canUndo ?? false) }
-    public var canRedo: Bool { cropSession == nil && (document?.canRedo ?? false) }
+
+    /// The committed surface, for the platform adapters that need pixels rather than a view.
+    public var canvasImage: CGImage? { document?.image }
 
     public var alphaMode: AlphaMode {
         get { document?.alphaMode ?? .keepAlpha }
@@ -76,6 +92,15 @@ public final class EditorModel {
     }
 
     // MARK: - Loading
+
+    /// The size of the blank canvas the app opens on when the clipboard is empty.
+    public static let blankCanvasSize = CGSize(width: 1440, height: 900)
+
+    /// Starts an empty white canvas, so the app is usable with nothing on the clipboard.
+    public func loadBlankCanvas(size: CGSize = EditorModel.blankCanvasSize) {
+        guard let image = ImageOps.blank(size: size) else { return }
+        load(image: image)
+    }
 
     public func load(image: CGImage, scale: CGFloat = 1) {
         document = ImageDocument(cgImage: image, scale: scale)
@@ -124,6 +149,8 @@ public final class EditorModel {
         session = nil
         preview = nil
         textSession = nil
+        // An anchored arrow belongs to the tool that anchored it.
+        pendingArrow = nil
 
         activeTool = tool
         if tool == .crop {
@@ -171,7 +198,15 @@ public final class EditorModel {
         guard var session, let document else { return }
         session.update(to: point, constrain: constrain)
         self.session = session
-        preview = session.annotation.flatMap { document.preview($0) }
+
+        // With an arrow's tail already anchored, this drag supplies its head.
+        if var pending = pendingArrow, activeTool == .arrow {
+            pending.head = point
+            pendingArrow = pending
+            preview = document.preview(arrowAnnotation(tail: pending.tail, head: point))
+        } else {
+            preview = session.annotation.flatMap { document.preview($0) }
+        }
         bump()
     }
 
@@ -180,6 +215,29 @@ public final class EditorModel {
             cancelStroke()
             return
         }
+
+        // Second interaction of a two-click arrow: the drag (or click) places the head.
+        if let pending = pendingArrow, activeTool == .arrow {
+            let head = session.currentPoint ?? pending.head
+            self.session = nil
+            preview = nil
+            pendingArrow = nil
+            if head != pending.tail {
+                document.commit(arrowAnnotation(tail: pending.tail, head: head))
+            }
+            bump()
+            return
+        }
+
+        // A plain click with the arrow tool anchors the tail and waits for the head.
+        if activeTool == .arrow, session.isClick, let anchor = session.startPoint {
+            self.session = nil
+            preview = nil
+            pendingArrow = PendingArrow(tail: anchor, head: anchor)
+            bump()
+            return
+        }
+
         let annotation = session.annotation
         self.session = nil
         preview = nil
@@ -187,6 +245,34 @@ public final class EditorModel {
             document.commit(annotation)
         }
         bump()
+    }
+
+    /// Moves the head of a two-click arrow while the pointer moves with no button pressed.
+    public func updateArrowHover(to point: CGPoint) {
+        guard let document, var pending = pendingArrow, activeTool == .arrow else { return }
+        pending.head = point
+        pendingArrow = pending
+        preview = document.preview(arrowAnnotation(tail: pending.tail, head: point))
+        bump()
+    }
+
+    /// Abandons a two-click arrow, e.g. on Escape.
+    public func cancelPendingArrow() {
+        guard pendingArrow != nil else { return }
+        pendingArrow = nil
+        preview = nil
+        bump()
+    }
+
+    /// The single place an arrow's proportional metrics are applied, so the live preview and
+    /// the committed pixels are identical.
+    private func arrowAnnotation(tail: CGPoint, head: CGPoint) -> Annotation {
+        let metrics = style.arrowMetrics(forLength: Double(Geometry.distance(tail, head)))
+        var arrowStyle = style
+        arrowStyle.arrowHeadLength = metrics.headLength
+        arrowStyle.arrowHeadWidth = metrics.headWidth
+        arrowStyle.arrowShaftWidth = metrics.shaftWidth
+        return .arrow(from: tail, to: head, style: arrowStyle)
     }
 
     public func cancelStroke() {
@@ -321,14 +407,18 @@ public final class EditorModel {
         if viewportSize != .zero { fit() }
     }
 
+    public func clearCanvas() {
+        guard cropSession == nil, let document, document.clearCanvas() else { return }
+        preview = nil
+        bump()
+    }
+
     // MARK: - Export
 
     public func pngData() -> Data? {
         guard cropSession == nil else { return nil }
         return document?.pngData()
     }
-
-    public var suggestedFileName: String { "Stitch.png" }
 
     // MARK: - Viewport
 
@@ -383,11 +473,18 @@ public final class EditorModel {
         preview = nil
         cropSession = nil
         textSession = nil
+        pendingArrow = nil
         if activeTool == .crop { activeTool = lastDrawingTool }
     }
 
     private func bump() {
         displayedImage = cropSession?.stagedImage ?? document?.image
         displayedSize = cropSession?.stagedSize ?? document?.pixelSize ?? .zero
+
+        hasImage = document != nil
+        canvasSize = document?.pixelSize ?? .zero
+        canExport = document != nil && cropSession == nil
+        canUndo = cropSession == nil && (document?.canUndo ?? false)
+        canRedo = cropSession == nil && (document?.canRedo ?? false)
     }
 }

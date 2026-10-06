@@ -52,7 +52,7 @@ Then pick the **Stitch** scheme and either the *My Mac* or an iOS Simulator dest
 make test          # StitchKit unit tests (Swift Testing)
 ```
 
-145 tests cover the annotation geometry, the dirty-rect undo/redo patches, crop, rotate
+171 tests cover the annotation geometry, the dirty-rect undo/redo patches, crop, rotate
 and straighten maths, blend modes, PNG export and the clipboard-to-PNG pipeline.
 
 ### Signing
@@ -71,15 +71,25 @@ The toolbar mirrors classic Skitch, top to bottom:
 | Text | font, size, bold/italic/underline, colour, alignment, text background |
 | Rectangle | **rectangle · rounded rectangle · oval · line**, corner radius, fill, thickness |
 | Marker | marker / highlighter / eraser, thickness |
+| — | **Clear** (in the action bar, and ⇧⌘K) wipes the canvas back to a blank sheet, undoably |
 | Stamp | the ✕ ! ? ✓ ♥ badge set, quick emoji, the system emoji picker |
 | Crop | rotate 90° left/right, flip H/V, **straighten**, aspect presets, transparency mode, Apply/Cancel |
 | — divider — | |
 | Foreground colour | palette |
 | Background colour | palette, including "no fill" |
 
-**The arrow is drawn head-first**, as in Skitch: press on the thing you are pointing at and
-drag the tail out behind it, so the head lands exactly where you clicked. Hold **shift**
-while dragging to make shapes square and to snap arrows and lines to 45°.
+**The arrow matches Skitch**: one solid silhouette — a tapered shaft running into a barbed
+head — whose head, shaft and point all scale with the drag. There is no dialog for it,
+because there is nothing to configure.
+
+An arrow can be drawn two ways:
+
+- **Drag, head-first**: press on the thing you are pointing at and pull the tail out behind
+  it, so the head lands exactly where you clicked.
+- **Click, then click**: the first click anchors the tail and the arrow follows the pointer;
+  the next click (or drag) places the head. **Escape** abandons it.
+
+Hold **shift** while dragging to make shapes square and to snap arrows and lines to 45°.
 
 Every tool flyout has a **pin** in its header. Pinning docks the options beside the tool
 strip so they stay reachable while you draw, instead of closing as soon as you click back
@@ -114,9 +124,11 @@ scene graph:
 
 - **`CanvasBitmap`** owns one mutable `CGBitmapContext`, presented with a top-left
   origin so annotation geometry is plain image-pixel coordinates.
-- **Preview and commit share one draw path** (`Renderer.draw`). The in-flight gesture is
-  rendered over a copy of the pixels it covers, which is what makes the highlighter's
-  multiply blend and the eraser's clear blend preview exactly what gets committed.
+- **The live preview is a transparent overlay**, not a copy of the backdrop. It contains
+  only the in-flight annotation, clipped to that annotation's bounds, and the view
+  composites it with the blend mode the commit will use — `multiply` for the highlighter,
+  `destinationOut` for the eraser. That is what keeps the drag seamless: no patch edge, no
+  helper rectangle, nothing re-copied from the image on each frame.
 - **History stores dirty-rect pixel patches** — the `before` and `after` bytes of just
   the affected bounding box — so an undo step on a 5K screenshot costs kilobytes
   instead of another full-size bitmap. Crop, rotate and flip replace the surface
@@ -141,7 +153,7 @@ StitchKit/                   platform-agnostic core (Swift Package)
     Tools/                   drag-to-annotation sessions, crop session
     Editing/                 ImageDocument (pixels + history), EditorModel (app state)
     Export/                  rotate/flip/crop ops, alpha modes, PNG encode/decode
-  Tests/StitchKitTests/      145 tests
+  Tests/StitchKitTests/      171 tests
 Stitch/                      SwiftUI app
   Views/                     toolbar, canvas, crop overlay, format bars, action bar
   Platform/                  NSPasteboard/UIPasteboard adapters, PNG file document

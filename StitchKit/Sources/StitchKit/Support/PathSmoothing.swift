@@ -45,45 +45,55 @@ public enum PathSmoothing {
 }
 
 public enum ArrowGeometry {
-    /// The filled arrowhead triangle, or an empty array for a degenerate drag.
-    public static func head(
-        from start: CGPoint,
-        to end: CGPoint,
-        length: Double,
-        width: Double
+    /// The filled outline of a Skitch-style arrow: a tapered shaft running into a barbed head,
+    /// as a single shape.
+    ///
+    /// Returns the polygon in order — tail corner, shaft edge, barb, tip, barb, shaft edge,
+    /// tail corner — or an empty array for a degenerate arrow.
+    public static func outline(
+        from tail: CGPoint,
+        to tip: CGPoint,
+        metrics: ArrowMetrics
     ) -> [CGPoint] {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let magnitude = (dx * dx + dy * dy).squareRoot()
-        guard magnitude > 0.0001 else { return [] }
+        let dx = tip.x - tail.x
+        let dy = tip.y - tail.y
+        let length = (dx * dx + dy * dy).squareRoot()
+        guard length > 0.01 else { return [] }
 
-        let unitX = dx / magnitude
-        let unitY = dy / magnitude
-        let headLength = min(CGFloat(length), magnitude)
-        let halfWidth = CGFloat(width) / 2
+        let unit = CGPoint(x: dx / length, y: dy / length)
+        // Perpendicular, pointing to one side of the arrow.
+        let normal = CGPoint(x: -unit.y, y: unit.x)
 
-        let base = CGPoint(x: end.x - unitX * headLength, y: end.y - unitY * headLength)
-        let perpendicularX = -unitY
-        let perpendicularY = unitX
+        let halfHead = CGFloat(metrics.headWidth) / 2
+        let halfShaft = CGFloat(metrics.shaftWidth) / 2
+        // The head can never eat the whole arrow.
+        let headLength = min(CGFloat(metrics.headLength), length)
+        let base = CGPoint(x: tip.x - unit.x * headLength, y: tip.y - unit.y * headLength)
+
+        func offset(_ point: CGPoint, _ amount: CGFloat) -> CGPoint {
+            CGPoint(x: point.x + normal.x * amount, y: point.y + normal.y * amount)
+        }
 
         return [
-            end,
-            CGPoint(x: base.x + perpendicularX * halfWidth, y: base.y + perpendicularY * halfWidth),
-            CGPoint(x: base.x - perpendicularX * halfWidth, y: base.y - perpendicularY * halfWidth),
+            offset(tail, halfShaft),
+            offset(base, halfShaft),
+            offset(base, halfHead),
+            tip,
+            offset(base, -halfHead),
+            offset(base, -halfShaft),
+            offset(tail, -halfShaft),
         ]
     }
 
-    /// Where the shaft should stop so it does not poke through the filled head.
-    public static func shaftEnd(
-        from start: CGPoint,
-        to end: CGPoint,
-        length: Double
-    ) -> CGPoint {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let magnitude = (dx * dx + dy * dy).squareRoot()
-        guard magnitude > 0.0001 else { return end }
-        let headLength = min(CGFloat(length), magnitude)
-        return CGPoint(x: end.x - dx / magnitude * headLength, y: end.y - dy / magnitude * headLength)
+    /// The path for a filled arrow, or `nil` when there is nothing to draw.
+    public static func path(from tail: CGPoint, to tip: CGPoint, metrics: ArrowMetrics) -> CGPath? {
+        let points = outline(from: tail, to: tip, metrics: metrics)
+        guard let first = points.first else { return nil }
+
+        let path = CGMutablePath()
+        path.move(to: first)
+        for point in points.dropFirst() { path.addLine(to: point) }
+        path.closeSubpath()
+        return path
     }
 }

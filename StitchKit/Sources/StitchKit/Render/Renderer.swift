@@ -42,11 +42,15 @@ public enum Renderer {
     public static func bounds(of annotation: Annotation) -> CGRect {
         switch annotation {
         case let .arrow(from, to, style):
-            let margin = max(style.lineWidth, style.arrowHeadWidth)
-            guard from != to else {
-                return CGRect(x: from.x - margin, y: from.y - margin, width: margin * 2, height: margin * 2)
-            }
-            return Geometry.rect(from: from, to: to).insetBy(dx: -margin, dy: -margin)
+            let metrics = ArrowMetrics(
+                headLength: style.arrowHeadLength,
+                headWidth: style.arrowHeadWidth,
+                shaftWidth: style.arrowShaftWidth
+            )
+            let outline = ArrowGeometry.outline(from: from, to: to, metrics: metrics)
+            guard !outline.isEmpty else { return .null }
+            // One pixel of slack for the antialiased edge.
+            return Geometry.boundingBox(of: outline).insetBy(dx: -1, dy: -1)
 
         case let .line(from, to, style):
             let margin = CGFloat(style.lineWidth)
@@ -82,15 +86,19 @@ public enum Renderer {
     // MARK: - Shapes
 
     private static func drawArrow(from: CGPoint, to: CGPoint, style: AnnotationStyle, in context: CGContext) {
-        StampRasterizer.drawArrow(
-            from: from,
-            to: to,
-            lineWidth: CGFloat(style.lineWidth),
-            headLength: CGFloat(style.arrowHeadLength),
-            headWidth: CGFloat(style.arrowHeadWidth),
-            color: style.stroke.cgColor,
-            context: context
+        let metrics = ArrowMetrics(
+            headLength: style.arrowHeadLength,
+            headWidth: style.arrowHeadWidth,
+            shaftWidth: style.arrowShaftWidth
         )
+        guard let path = ArrowGeometry.path(from: from, to: to, metrics: metrics) else { return }
+
+        context.saveGState()
+        context.setFillColor(style.stroke.cgColor)
+        context.addPath(path)
+        // Filled, not stroked: the arrow is one solid silhouette.
+        context.fillPath()
+        context.restoreGState()
     }
 
     private static func drawLine(from: CGPoint, to: CGPoint, style: AnnotationStyle, in context: CGContext) {

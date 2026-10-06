@@ -69,6 +69,28 @@ public enum Annotation: Hashable, Sendable {
         case let .stamp(stamp): stamp.style
         }
     }
+
+    /// How a live preview of this annotation must composite with the pixels underneath.
+    ///
+    /// The preview is drawn as a transparent overlay rather than baked over a copy of the
+    /// backdrop, so the blend has to happen at display time for the highlighter to tint and
+    /// the eraser to cut through.
+    public var previewBlendMode: PreviewBlendMode {
+        guard case let .freehand(kind, _, _) = self else { return .normal }
+        switch kind {
+        case .pen: return .normal
+        case .highlighter: return .multiply
+        case .eraser: return .destinationOut
+        }
+    }
+}
+
+/// Display-time blend modes a preview needs. Kept free of any UI framework so the kit stays
+/// portable; the app maps these onto its own blend modes.
+public enum PreviewBlendMode: String, Sendable {
+    case normal
+    case multiply
+    case destinationOut
 }
 
 // MARK: - Codable

@@ -63,7 +63,14 @@ public enum ToolGroup: String, Codable, CaseIterable, Sendable {
 
     public var defaultTool: ToolID { tools[0] }
 
+    /// More than one tool, so the flyout offers a sub-tool picker.
     public var hasSubmenu: Bool { tools.count > 1 }
+
+    /// Whether the slot has a flyout at all.
+    ///
+    /// The arrow deliberately has none: it scales itself to the drag, so there is nothing to
+    /// configure, and a dialog on the most-used tool gets in the way.
+    public var hasOptions: Bool { self != .arrow }
 
     public static func group(for tool: ToolID) -> ToolGroup? {
         allCases.first { $0.tools.contains(tool) }

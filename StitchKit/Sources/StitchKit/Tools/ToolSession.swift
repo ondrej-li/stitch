@@ -55,6 +55,18 @@ public struct ToolSession {
         isConstrained = false
     }
 
+    /// Where the gesture began.
+    public var startPoint: CGPoint? { start }
+
+    /// Where the pointer currently is.
+    public var currentPoint: CGPoint? { current }
+
+    /// A press that never really moved, so it should count as a click rather than a drag.
+    public var isClick: Bool {
+        guard let start, let current else { return false }
+        return Geometry.distance(start, current) < Self.clickThreshold
+    }
+
     /// The annotation as it currently stands, or `nil` when nothing has been drawn yet.
     public var annotation: Annotation? {
         guard isActive, let start, let current else { return nil }
@@ -65,7 +77,11 @@ public struct ToolSession {
             // are pointing at, then pull the tail out behind it.
             let tail = snappedEnd(from: start, to: current)
             guard start != tail else { return nil }
-            return .arrow(from: tail, to: start, style: style)
+            return .arrow(
+                from: tail,
+                to: start,
+                style: arrowStyle(forLength: Geometry.distance(tail, start))
+            )
 
         case .line:
             let end = snappedEnd(from: start, to: current)
@@ -137,6 +153,17 @@ public struct ToolSession {
     private func cornerRadius(for rect: CGRect) -> Double {
         if style.cornerRadius > 0 { return style.cornerRadius }
         return Double(min(rect.width, rect.height) * Self.roundedCornerFraction)
+    }
+
+    /// The arrow scales with its own length. `AnnotationStyle.arrowMetrics` is the single
+    /// source of truth, so the drag preview and the commit agree exactly.
+    private func arrowStyle(forLength length: CGFloat) -> AnnotationStyle {
+        var style = self.style
+        let metrics = style.arrowMetrics(forLength: Double(length))
+        style.arrowHeadLength = metrics.headLength
+        style.arrowHeadWidth = metrics.headWidth
+        style.arrowShaftWidth = metrics.shaftWidth
+        return style
     }
 
     /// A click places the stamp at its default size; dragging outward sizes it.

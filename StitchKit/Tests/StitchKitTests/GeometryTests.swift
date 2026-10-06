@@ -74,33 +74,101 @@ struct PathGeometryTests {
         #expect(samples.insetBy(dx: -4, dy: -4).contains(path.boundingBox))
     }
 
-    @Test("Arrow head is a triangle pointing at the end point")
-    func arrowHead() {
-        let head = ArrowGeometry.head(
-            from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 0), length: 20, width: 10
+    @Test("An arrow outline is one filled shape: tail, shaft, barbs, tip")
+    func arrowOutline() throws {
+        let metrics = ArrowMetrics(headLength: 20, headWidth: 16, shaftWidth: 6)
+        let outline = ArrowGeometry.outline(
+            from: CGPoint(x: 0, y: 0),
+            to: CGPoint(x: 100, y: 0),
+            metrics: metrics
         )
-        #expect(head.count == 3)
-        #expect(head[0] == CGPoint(x: 100, y: 0))
-        #expect(head[1] == CGPoint(x: 80, y: 5))
-        #expect(head[2] == CGPoint(x: 80, y: -5))
+
+        #expect(outline.count == 7)
+        // Tip exactly at the head end.
+        #expect(outline[3] == CGPoint(x: 100, y: 0))
+        // The head base sits one head-length back, with barbs half a head-width out.
+        #expect(outline[2] == CGPoint(x: 80, y: 8))
+        #expect(outline[4] == CGPoint(x: 80, y: -8))
+        // The shaft is much thinner than the head, which is what makes it look like Skitch's
+        // solid arrow rather than a line with a triangle on the end.
+        #expect(outline[0] == CGPoint(x: 0, y: 3))
+        #expect(outline[6] == CGPoint(x: 0, y: -3))
     }
 
-    @Test("A degenerate arrow has no head")
+    @Test("A degenerate arrow has no outline")
     func degenerateArrow() {
-        #expect(ArrowGeometry.head(from: .zero, to: .zero, length: 20, width: 10).isEmpty)
+        let metrics = ArrowMetrics(headLength: 20, headWidth: 16, shaftWidth: 6)
+        #expect(ArrowGeometry.outline(from: .zero, to: .zero, metrics: metrics).isEmpty)
+        #expect(ArrowGeometry.path(from: .zero, to: .zero, metrics: metrics) == nil)
     }
 
-    @Test("Shaft stops at the head so it cannot poke through")
-    func shaftEnd() {
-        let end = ArrowGeometry.shaftEnd(
-            from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 0), length: 20
+    @Test("The head never grows past the arrow itself")
+    func headClampedToLength() {
+        // A head longer than the arrow would fold the barbs behind the tail.
+        let metrics = ArrowMetrics(headLength: 500, headWidth: 60, shaftWidth: 10)
+        let outline = ArrowGeometry.outline(
+            from: CGPoint(x: 0, y: 0),
+            to: CGPoint(x: 40, y: 0),
+            metrics: metrics
         )
-        #expect(end == CGPoint(x: 80, y: 0))
+        #expect(outline[2].x == 0)
+        #expect(outline[4].x == 0)
     }
 
-    @Test("A drag shorter than the head keeps the shaft inside the drag")
-    func shaftEndShorterThanHead() {
-        let end = ArrowGeometry.shaftEnd(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 5, y: 0), length: 20)
-        #expect(end == CGPoint(x: 0, y: 0))
+    @Test("The arrow path closes, so it fills as a silhouette")
+    func arrowPathCloses() throws {
+        let metrics = ArrowMetrics(headLength: 20, headWidth: 16, shaftWidth: 6)
+        let path = try #require(
+            ArrowGeometry.path(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 0), metrics: metrics)
+        )
+        let box = path.boundingBox
+        #expect(box.minX >= -0.01)
+        #expect(box.maxX <= 100.01)
+        #expect(box.height <= 16.01)
+    }
+}
+
+@Suite("Arrow metrics")
+struct ArrowMetricsTests {
+    @Test("A long arrow gets a proportionally bigger head and shaft")
+    func scalesWithLength() {
+        let style = AnnotationStyle()
+        let short = style.arrowMetrics(forLength: 100)
+        let long = style.arrowMetrics(forLength: 600)
+
+        #expect(short.headLength < long.headLength)
+        #expect(short.shaftWidth < long.shaftWidth)
+        // 30% of the length while under the cap.
+        #expect(abs(long.headLength - 180) < 0.001)
+        #expect(abs(long.headWidth - 153) < 0.001)
+    }
+
+    @Test("A stubby arrow keeps a head proportional to the stroke, not the length")
+    func thicknessFloor() {
+        var style = AnnotationStyle()
+        style.lineWidth = 4
+        let metrics = style.arrowMetrics(forLength: 10)
+
+        // 10 * 0.30 = 3, below the max(6, 4 * 3) = 12 floor.
+        #expect(metrics.headLength == 12)
+        #expect(metrics.headLength < 10 * AnnotationStyle.arrowHeadMaximumFraction * 2)
+    }
+
+    @Test("The shaft is a fraction of the head, never thinner than the stroke")
+    func shaftProportions() {
+        var style = AnnotationStyle()
+        style.lineWidth = 2
+        let metrics = style.arrowMetrics(forLength: 500)
+
+        #expect(metrics.shaftWidth > style.lineWidth)
+        #expect(metrics.shaftWidth < metrics.headWidth)
+        #expect(abs(metrics.shaftWidth - metrics.headWidth * AnnotationStyle.arrowShaftWidthRatio) < 0.001)
+    }
+
+    @Test("The head never eats the whole arrow")
+    func headCapped() {
+        let style = AnnotationStyle()
+        let metrics = style.arrowMetrics(forLength: 40)
+        #expect(metrics.headLength <= 40 * AnnotationStyle.arrowHeadMaximumFraction + 0.001)
     }
 }

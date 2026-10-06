@@ -5,6 +5,18 @@ import UniformTypeIdentifiers
 
 /// Whole-image operations behind the crop menu.
 public enum ImageOps {
+    /// An opaque blank canvas, used when the app opens with an empty clipboard.
+    public static func blank(size: CGSize, color: RGBAColor = .white) -> CGImage? {
+        let width = Int(size.width.rounded())
+        let height = Int(size.height.rounded())
+        guard width >= 1, height >= 1 else { return nil }
+        guard let context = BitmapContextFactory.make(width: width, height: height, opaque: true) else {
+            return nil
+        }
+        context.setFillColor(color.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
     /// Applies rotation, straightening and flipping. Returns the original image when the
     /// transform is identity.
     public static func transformed(_ image: CGImage, _ transform: CropTransform) -> CGImage? {

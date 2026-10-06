@@ -5,6 +5,10 @@ import Testing
 @Suite("Tool sessions")
 @MainActor
 struct ToolSessionTests {
+    private enum SessionError: Error {
+        case noAnnotation
+    }
+
     private func makeStyle() -> AnnotationStyle {
         var style = AnnotationStyle()
         style.lineWidth = 4
@@ -40,6 +44,78 @@ struct ToolSessionTests {
         #expect(to == CGPoint(x: 10, y: 10))
         #expect(abs(from.y - 10) < 0.001)
         #expect(abs(from.x - 50.012) < 0.01)
+    }
+
+    @Test("An arrow's head scales with its own length")
+    func arrowHeadScalesWithLength() throws {
+        func metrics(forTail tail: CGPoint) throws -> ArrowMetrics {
+            var session = ToolSession(tool: .arrow, style: makeStyle())
+            session.begin(at: CGPoint(x: 0, y: 0))
+            session.update(to: tail)
+            guard case let .arrow(_, _, style) = try #require(session.annotation) else {
+                throw SessionError.noAnnotation
+            }
+            return ArrowMetrics(
+                headLength: style.arrowHeadLength,
+                headWidth: style.arrowHeadWidth,
+                shaftWidth: style.arrowShaftWidth
+            )
+        }
+
+        let short = try metrics(forTail: CGPoint(x: 60, y: 0))
+        let long = try metrics(forTail: CGPoint(x: 600, y: 0))
+
+        #expect(short.headLength < long.headLength)
+        #expect(short.headWidth < long.headWidth)
+        #expect(abs(long.headLength - 180) < 0.001)
+        #expect(abs(long.headWidth - 153) < 0.001)
+    }
+
+    @Test("A stubby arrow keeps a head proportional to its thickness")
+    func arrowHeadHasAThicknessFloor() throws {
+        var session = ToolSession(tool: .arrow, style: makeStyle())
+        session.begin(at: CGPoint(x: 0, y: 0))
+        session.update(to: CGPoint(x: 20, y: 0))
+
+        guard case let .arrow(_, _, style) = try #require(session.annotation) else {
+            Issue.record("expected an arrow")
+            return
+        }
+        // 20 * 0.30 = 6, below the max(6, 4 * 3) = 12 floor.
+        #expect(style.arrowHeadLength == 12)
+        #expect(style.arrowShaftWidth > 0)
+        #expect(style.arrowShaftWidth < style.arrowHeadWidth)
+    }
+
+    @Test("A zero-length arrow is not drawn at all")
+    func zeroLengthArrow() {
+        var session = ToolSession(tool: .arrow, style: makeStyle())
+        session.begin(at: CGPoint(x: 40, y: 40))
+        session.update(to: CGPoint(x: 40, y: 40))
+        #expect(session.annotation == nil)
+    }
+
+    @Test("An arrow leaves the caller's style untouched")
+    func arrowDoesNotMutateStyle() throws {
+        let style = makeStyle()
+        var session = ToolSession(tool: .arrow, style: style)
+        session.begin(at: CGPoint(x: 0, y: 0))
+        session.update(to: CGPoint(x: 600, y: 0))
+        _ = try #require(session.annotation)
+
+        #expect(session.style.arrowHeadLength == style.arrowHeadLength)
+        #expect(session.style.arrowShaftWidth == style.arrowShaftWidth)
+    }
+
+    @Test("A press that never moves counts as a click")
+    func clickDetection() {
+        var session = ToolSession(tool: .arrow, style: makeStyle())
+        session.begin(at: CGPoint(x: 10, y: 10))
+        session.update(to: CGPoint(x: 11, y: 10))
+        #expect(session.isClick)
+
+        session.update(to: CGPoint(x: 90, y: 10))
+        #expect(!session.isClick)
     }
 
     @Test("A line spans the drag")
@@ -233,6 +309,24 @@ struct ToolGroupTests {
         #expect(ToolGroup.shape.tools == [.rectangle, .roundedRectangle, .ellipse, .line])
         #expect(ToolGroup.shape.defaultTool == .rectangle)
         #expect(ToolGroup.shape.hasSubmenu)
+    }
+
+    @Test("The arrow slot has no flyout, because the arrow configures itself")
+    func arrowHasNoOptions() {
+        #expect(!ToolGroup.arrow.hasOptions)
+        #expect(!ToolGroup.arrow.hasSubmenu)
+        #expect(ToolGroup.arrow.tools == [.arrow])
+
+        // Every other slot keeps its flyout.
+        for group in ToolGroup.allCases where group != .arrow {
+            #expect(group.hasOptions, "\(group) should keep its options")
+        }
+    }
+
+    @Test("Only the shape and draw slots have a sub-tool picker")
+    func submenuSlots() {
+        let withSubmenu = ToolGroup.allCases.filter(\.hasSubmenu)
+        #expect(withSubmenu == [.shape, .draw])
     }
 
     @Test("Every tool belongs to exactly one slot")

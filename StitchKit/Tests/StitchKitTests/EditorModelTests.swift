@@ -36,6 +36,71 @@ struct EditorModelTests {
         #expect(model.displayedImage != nil)
     }
 
+    @Test("A blank canvas starts ready to draw on")
+    func blankCanvas() {
+        let model = EditorModel()
+        #expect(!model.hasImage)
+
+        model.loadBlankCanvas(size: CGSize(width: 300, height: 200))
+
+        #expect(model.hasImage)
+        #expect(model.canvasSize == CGSize(width: 300, height: 200))
+        #expect(!model.canUndo)
+        #expect(!model.canRedo)
+        #expect(model.canExport)
+        #expect(model.displayedImage != nil)
+    }
+
+    @Test("A blank canvas is opaque white, so drawings are visible on it")
+    func blankCanvasIsWhite() throws {
+        let model = EditorModel()
+        model.loadBlankCanvas(size: CGSize(width: 40, height: 30))
+        let image = try #require(model.canvasImage)
+        #expect(isColour(image, 20, 15, .white))
+        #expect(pixel(image, 20, 15).isOpaque)
+    }
+
+    @Test("The default blank canvas is a usable size")
+    func defaultBlankCanvasSize() {
+        let model = EditorModel()
+        model.loadBlankCanvas()
+        #expect(model.canvasSize == EditorModel.blankCanvasSize)
+        #expect(model.canvasSize.width >= 800)
+    }
+
+    @Test("A degenerate blank canvas request is ignored")
+    func degenerateBlankCanvas() {
+        let model = EditorModel()
+        model.loadBlankCanvas(size: .zero)
+        #expect(!model.hasImage)
+    }
+
+    @Test("Availability flags track the document, so menus can enable themselves")
+    func availabilityFlagsTrackState() {
+        let model = loadedModel()
+        #expect(model.hasImage)
+        #expect(!model.canUndo)
+        #expect(!model.canRedo)
+
+        drawRedRectangle(on: model)
+        #expect(model.canUndo, "undo must become available as soon as something is committed")
+        #expect(!model.canRedo)
+
+        model.undo()
+        #expect(!model.canUndo)
+        #expect(model.canRedo, "redo must become available after undoing")
+
+        model.redo()
+        #expect(model.canUndo)
+        #expect(!model.canRedo)
+
+        model.close()
+        #expect(!model.hasImage)
+        #expect(!model.canUndo)
+        #expect(!model.canExport)
+        #expect(model.canvasSize == .zero)
+    }
+
     @Test("Default stroke and font sizes scale with the image")
     func styleDefaults() {
         let model = EditorModel()
@@ -136,6 +201,164 @@ struct EditorModelTests {
         #expect(isColour(try #require(model.canvasImage), 30, 30, .white))
     }
 
+    /// The preview must never touch the backdrop, or a helper rectangle appears over the image.
+    @Test("A preview covers only the annotation, not the pixels behind it")
+    func previewIsAnnotationOnly() throws {
+        let model = loadedModel(width: 120, height: 60)
+        model.activeTool = .rectangle
+        model.beginStroke(at: CGPoint(x: 40, y: 20))
+        model.updateStroke(to: CGPoint(x: 90, y: 45))
+
+        let preview = try #require(model.preview)
+        // The overlay is clipped to the shape's own bounds, and is transparent wherever the
+        // shape does not paint.
+        #expect(preview.rect.width < 60)
+        #expect(preview.rect.height < 35)
+        #expect(pixel(preview.image, 0, 0).isTransparent)
+        #expect(preview.blendMode == .normal)
+    }
+
+    @Test("The highlighter previews with multiply and the eraser with destination-out")
+    func previewBlendModes() throws {
+        let model = loadedModel()
+
+        model.activeTool = .highlighter
+        model.beginStroke(at: CGPoint(x: 10, y: 30))
+        model.updateStroke(to: CGPoint(x: 50, y: 30))
+        let highlight = try #require(model.preview)
+        #expect(highlight.blendMode == .multiply)
+        #expect(highlight.image.alphaInfo == .premultipliedLast)
+
+        model.activeTool = .eraser
+        model.beginStroke(at: CGPoint(x: 10, y: 30))
+        model.updateStroke(to: CGPoint(x: 50, y: 30))
+        #expect(try #require(model.preview).blendMode == .destinationOut)
+
+        model.activeTool = .pen
+        model.beginStroke(at: CGPoint(x: 10, y: 30))
+        model.updateStroke(to: CGPoint(x: 50, y: 30))
+        #expect(try #require(model.preview).blendMode == .normal)
+    }
+
+    // MARK: - Two-click arrows
+
+    @Test("A click anchors an arrow's tail, and the next click places the head")
+    func clickClickArrow() throws {
+        let model = loadedModel(width: 200, height: 200)
+        model.select(tool: .arrow)
+
+        model.beginStroke(at: CGPoint(x: 40, y: 40))
+        model.endStroke()
+        #expect(model.pendingArrow?.tail == CGPoint(x: 40, y: 40))
+        #expect(!model.canUndo, "anchoring a tail commits nothing")
+
+        model.beginStroke(at: CGPoint(x: 150, y: 100))
+        model.endStroke()
+
+        #expect(model.pendingArrow == nil)
+        #expect(model.canUndo)
+        // The head is at the second click, the tail at the first.
+        let image = try #require(model.canvasImage)
+        #expect(containsPixelDifferentFrom(image, .white, in: CGRect(x: 20, y: 20, width: 40, height: 40)))
+        #expect(containsPixelDifferentFrom(image, .white, in: CGRect(x: 130, y: 80, width: 40, height: 40)))
+    }
+
+    @Test("Hovering moves the head of an anchored arrow without committing")
+    func hoverMovesHead() throws {
+        let model = loadedModel(width: 200, height: 200)
+        model.select(tool: .arrow)
+        model.beginStroke(at: CGPoint(x: 40, y: 40))
+        model.endStroke()
+
+        model.updateArrowHover(to: CGPoint(x: 160, y: 40))
+
+        let preview = try #require(model.preview)
+        #expect(preview.rect.width >= 100)
+        #expect(model.pendingArrow?.head == CGPoint(x: 160, y: 40))
+        #expect(!model.canUndo)
+    }
+
+    @Test("A drag after the first click places the head too")
+    func dragAfterClick() throws {
+        let model = loadedModel(width: 200, height: 200)
+        model.select(tool: .arrow)
+        model.beginStroke(at: CGPoint(x: 40, y: 40))
+        model.endStroke()
+
+        model.beginStroke(at: CGPoint(x: 60, y: 60))
+        model.updateStroke(to: CGPoint(x: 170, y: 150))
+        model.endStroke()
+
+        #expect(model.pendingArrow == nil)
+        #expect(model.canUndo)
+    }
+
+    @Test("A plain drag still draws an arrow in one gesture")
+    func dragStillDrawsArrow() throws {
+        let model = loadedModel(width: 200, height: 200)
+        model.select(tool: .arrow)
+
+        model.beginStroke(at: CGPoint(x: 150, y: 100))
+        model.updateStroke(to: CGPoint(x: 40, y: 40))
+        model.endStroke()
+
+        #expect(model.pendingArrow == nil)
+        #expect(model.canUndo)
+    }
+
+    @Test("Escape abandons an anchored arrow")
+    func cancelPendingArrow() {
+        let model = loadedModel()
+        model.select(tool: .arrow)
+        model.beginStroke(at: CGPoint(x: 40, y: 40))
+        model.endStroke()
+        #expect(model.pendingArrow != nil)
+
+        model.cancelPendingArrow()
+        #expect(model.pendingArrow == nil)
+        #expect(model.preview == nil)
+        #expect(!model.canUndo)
+    }
+
+    @Test("Switching tools drops an anchored arrow")
+    func switchingToolsCancelsPendingArrow() {
+        let model = loadedModel()
+        model.select(tool: .arrow)
+        model.beginStroke(at: CGPoint(x: 40, y: 40))
+        model.endStroke()
+
+        model.select(tool: .pen)
+        #expect(model.pendingArrow == nil)
+    }
+
+    // MARK: - Clear canvas
+
+    @Test("Clearing wipes the canvas back to blank and is undoable")
+    func clearCanvas() throws {
+        let model = loadedModel(width: 60, height: 60)
+        drawRedRectangle(on: model)
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+
+        model.clearCanvas()
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .white))
+        #expect(model.canvasSize == CGSize(width: 60, height: 60))
+        #expect(model.canUndo)
+
+        model.undo()
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+    }
+
+    @Test("Clearing is refused while cropping, so a staged crop is not lost")
+    func clearRefusedWhileCropping() throws {
+        let model = loadedModel()
+        drawRedRectangle(on: model)
+        model.select(tool: .crop)
+
+        model.clearCanvas()
+        #expect(model.isCropping)
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+    }
+
     @Test("Cancelling a stroke leaves no trace")
     func cancelStroke() throws {
         let model = loadedModel()
@@ -149,8 +372,7 @@ struct EditorModelTests {
         #expect(isColour(try #require(model.canvasImage), 30, 30, .white))
     }
 
-    @Test("The text tool commits nothing when the field is empty")
-    func emptyTextIsNotCommitted() {
+    @Test("The text tool commits nothing when the field is empty")    func emptyTextIsNotCommitted() {
         let model = loadedModel()
         model.select(tool: .text)
         model.beginText(at: CGPoint(x: 10, y: 10))

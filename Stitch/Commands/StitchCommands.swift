@@ -25,44 +25,45 @@ struct StitchCommands: Commands {
                 ImagePasteboard.write(pngData: png, fallbackImage: image)
             }
             .keyboardShortcut("c", modifiers: .command)
-            .disabled(!model.canExport)
         }
 
+        // Menu items are deliberately never disabled. SwiftUI does not re-evaluate
+        // `Commands` bodies from `@Observable` state, so gating these on `model.canUndo`
+        // leaves them permanently greyed out — and their shortcuts dead. The actions guard
+        // themselves instead, and the action bar shows the enabled/disabled affordance.
         CommandGroup(replacing: .undoRedo) {
             Button("Undo") { model.undo() }
                 .keyboardShortcut("z", modifiers: .command)
-                .disabled(!model.canUndo)
 
             Button("Redo") { model.redo() }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
-                .disabled(!model.canRedo)
         }
 
         CommandGroup(replacing: .saveItem) {
             Button("Save as PNG…") { model.requestExport() }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(!model.canExport)
 
             Button("Open…") { model.requestImport() }
                 .keyboardShortcut("o", modifiers: .command)
         }
 
-        CommandMenu("View") {
+        CommandMenu("Canvas") {
+            Button("Clear Canvas") { model.clearCanvas() }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+        }
+
+        CommandMenu("Zoom") {
             Button("Zoom In") { model.zoomIn() }
                 .keyboardShortcut("=", modifiers: .command)
-                .disabled(!model.hasImage || model.isCropping)
 
             Button("Zoom Out") { model.zoomOut() }
                 .keyboardShortcut("-", modifiers: .command)
-                .disabled(!model.hasImage || model.isCropping)
 
             Button("Actual Size") { model.actualSize() }
                 .keyboardShortcut("0", modifiers: .command)
-                .disabled(!model.hasImage || model.isCropping)
 
             Button("Fit in Window") { model.fit() }
                 .keyboardShortcut("9", modifiers: .command)
-                .disabled(!model.hasImage)
         }
 
         CommandMenu("Annotation") {

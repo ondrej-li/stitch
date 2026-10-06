@@ -46,7 +46,11 @@ struct ToolbarView: View {
                         set: { if let value = $0 { model.style.stroke = value } }
                     ),
                     allowsNoFill: false,
-                    title: "Foreground"
+                    title: "Foreground",
+                    lineWidth: Binding(
+                        get: { model.style.lineWidth },
+                        set: { model.setLineWidth($0) }
+                    )
                 )
             }
 
@@ -135,16 +139,18 @@ private struct ToolGroupButton: View {
             .help(group.displayName)
             .accessibilityLabel(group.displayName)
 
-            // Every slot has options behind the corner chevron, as in the reference strip.
-            Button(action: onShowOptions) {
-                SubmenuChevron()
-                    .frame(width: 7, height: 6)
-                    .padding(5)
-                    .contentShape(Rectangle())
+            // Every other slot exposes options behind the corner chevron.
+            if group.hasOptions {
+                Button(action: onShowOptions) {
+                    SubmenuChevron()
+                        .frame(width: 7, height: 6)
+                        .padding(5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("\(group.displayName) options")
+                .accessibilityLabel("\(group.displayName) options")
             }
-            .buttonStyle(.plain)
-            .help("\(group.displayName) options")
-            .accessibilityLabel("\(group.displayName) options")
         }
         .frame(width: 44, height: 40)
     }

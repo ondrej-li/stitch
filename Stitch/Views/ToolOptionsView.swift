@@ -20,17 +20,9 @@ struct ToolOptionsView: View {
 
             switch group {
             case .arrow:
-                labelledSlider(
-                    "Head length",
-                    value: $model.style.arrowHeadLength,
-                    range: 6...80
-                )
-                labelledSlider(
-                    "Head width",
-                    value: $model.style.arrowHeadWidth,
-                    range: 4...80
-                )
-                strokeSlider
+                // The arrow has no flyout: its head scales with the drag, so there is nothing
+                // to configure. This branch exists only to keep the switch exhaustive.
+                EmptyView()
 
             case .text:
                 TextFormatBar()

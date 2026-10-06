@@ -48,7 +48,10 @@ private struct SlashLine: Shape {
 struct PaletteView: View {
     @Binding var selection: RGBAColor?
     let allowsNoFill: Bool
-    let title: String
+    var title: String
+    /// The foreground well also carries the stroke thickness, which is what the arrow uses
+    /// now that its own flyout is gone.
+    var lineWidth: Binding<Double>?
 
     private let columns = Array(repeating: GridItem(.fixed(30), spacing: 6), count: 4)
 
@@ -78,6 +81,22 @@ struct PaletteView: View {
                 }
             }
 
+            if let lineWidth {
+                Divider()
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("Thickness")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(lineWidth.wrappedValue.formatted(.number.precision(.fractionLength(0))))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: lineWidth, in: 1...40)
+                }
+            }
+
             if allowsNoFill {
                 Divider()
                 Button {
@@ -89,6 +108,6 @@ struct PaletteView: View {
             }
         }
         .padding(12)
-        .frame(width: 160)
+        .frame(width: lineWidth == nil ? 160 : 190)
     }
 }
