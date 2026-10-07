@@ -10,6 +10,8 @@ enum Theme {
     static let hairline = Color(white: 0.30)
     static let icon = Color(white: 0.93)
     static let secondaryIcon = Color(white: 0.62)
+    static let disabledIcon = Color(white: 0.42)
+    static let hover = Color(white: 0.28)
     static let accent = Color(red: 0.16, green: 0.49, blue: 0.96)
     static let canvasCornerRadius: CGFloat = 2
 }

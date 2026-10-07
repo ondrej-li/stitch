@@ -39,6 +39,25 @@ public struct CanvasTransform: Equatable, Sendable {
         )
     }
 
+    /// Canvas point to a position inside the scroll content.
+    ///
+    /// The scroll view lays the canvas out at the content origin and positions the content
+    /// itself, so overlays placed inside the content must **not** include the centring
+    /// `offset` — adding it puts them beside the image instead of on it.
+    public func contentPoint(fromCanvas point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x * zoom, y: point.y * zoom)
+    }
+
+    /// Canvas rect to a rect inside the scroll content. See `contentPoint(fromCanvas:)`.
+    public func contentRect(fromCanvas rect: CGRect) -> CGRect {
+        CGRect(
+            x: rect.minX * zoom,
+            y: rect.minY * zoom,
+            width: rect.width * zoom,
+            height: rect.height * zoom
+        )
+    }
+
     public func canvasRect(fromView rect: CGRect) -> CGRect {
         guard zoom > 0 else { return .zero }
         return CGRect(

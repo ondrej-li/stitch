@@ -61,6 +61,10 @@ public final class EditorModel {
     public private(set) var importRequestCount = 0
     public private(set) var exportRequestCount = 0
 
+    /// Bumped when something asks to clear the canvas. The view answers it with a confirmation
+    /// before `clearCanvas()` runs, because wiping a pasted screenshot is worth one extra step.
+    public private(set) var clearRequestCount = 0
+
     private var session: ToolSession?
     private var lastDrawingTool: ToolID = .arrow
     private var viewportSize: CGSize = .zero
@@ -74,6 +78,9 @@ public final class EditorModel {
 
     /// Asks the view to present the save panel.
     public func requestExport() { exportRequestCount &+= 1 }
+
+    /// Asks the view to confirm, then clear. Deliberately does not clear on its own.
+    public func requestClear() { clearRequestCount &+= 1 }
 
     // MARK: - Document state
 
@@ -122,18 +129,25 @@ public final class EditorModel {
         bump()
     }
 
-    /// Sizes the default stroke and font to the image, so a 5K screenshot and a small
-    /// crop both get sensible starting values. Colour choices are preserved.
+    /// Sizes the *content-relative* defaults to the image, so a 5K screenshot and a small crop
+    /// both get sensible text and stamps. Thickness is deliberately left alone: it is an
+    /// explicit user choice with a fixed default, not something that should drift with the
+    /// image size. Colour choices are preserved.
     public static func styleDefaults(basedOn current: AnnotationStyle, canvasSize: CGSize) -> AnnotationStyle {
         let minSide = Double(min(canvasSize.width, canvasSize.height))
         guard minSide > 0 else { return current }
 
         var style = current
-        style.lineWidth = (minSide / 400).clamped(to: 1.5...12)
         style.fontSize = (minSide / 30).clamped(to: 14...96)
-        style.arrowHeadLength = style.lineWidth * 4.5
-        style.arrowHeadWidth = style.lineWidth * 3.5
         style.stampSize = (minSide / 12).clamped(to: 24...240)
+
+        // Keep the arrow fields coherent with the thickness, even though the arrow tool
+        // recomputes all four per drag.
+        let metrics = style.arrowMetrics(forLength: 200)
+        style.arrowHeadLength = metrics.headLength
+        style.arrowHeadWidth = metrics.headWidth
+        style.arrowBodyWidth = metrics.bodyWidth
+        style.arrowTailWidth = metrics.tailWidth
         return style
     }
 
@@ -162,9 +176,12 @@ public final class EditorModel {
     }
 
     public func setLineWidth(_ width: Double) {
-        style.lineWidth = width.clamped(to: 1...64)
-        style.arrowHeadLength = style.lineWidth * 4.5
-        style.arrowHeadWidth = style.lineWidth * 3.5
+        style.lineWidth = width.clamped(to: 1...80)
+        let metrics = style.arrowMetrics(forLength: 200)
+        style.arrowHeadLength = metrics.headLength
+        style.arrowHeadWidth = metrics.headWidth
+        style.arrowBodyWidth = metrics.bodyWidth
+        style.arrowTailWidth = metrics.tailWidth
         bump()
     }
 
@@ -271,7 +288,8 @@ public final class EditorModel {
         var arrowStyle = style
         arrowStyle.arrowHeadLength = metrics.headLength
         arrowStyle.arrowHeadWidth = metrics.headWidth
-        arrowStyle.arrowShaftWidth = metrics.shaftWidth
+        arrowStyle.arrowBodyWidth = metrics.bodyWidth
+        arrowStyle.arrowTailWidth = metrics.tailWidth
         return .arrow(from: tail, to: head, style: arrowStyle)
     }
 
@@ -371,7 +389,13 @@ public final class EditorModel {
 
     public func applyCrop() {
         guard let cropSession, let document else { return }
-        document.applyCrop(cropRect: cropSession.cropRect, transform: cropSession.transform)
+        // The crop menu's Transparency setting decides what fills any area the crop adds, so
+        // expansion never invents its own colour.
+        document.applyCrop(
+            cropRect: cropSession.cropRect,
+            transform: cropSession.transform,
+            background: alphaMode.backgroundColor
+        )
         endCrop()
     }
 

@@ -77,7 +77,7 @@ struct ImagePipelineTests {
 
         model.select(tool: .pen)
         model.activeTool = .eraser
-        model.style.lineWidth = 20
+        model.style.lineWidth = 2
         model.beginStroke(at: CGPoint(x: 5, y: 30))
         model.updateStroke(to: CGPoint(x: 55, y: 30))
         model.endStroke()

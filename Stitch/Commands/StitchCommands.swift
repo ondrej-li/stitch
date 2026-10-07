@@ -48,7 +48,7 @@ struct StitchCommands: Commands {
         }
 
         CommandMenu("Canvas") {
-            Button("Clear Canvas") { model.clearCanvas() }
+            Button("Clear Canvas…") { model.requestClear() }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
         }
 

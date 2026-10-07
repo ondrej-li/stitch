@@ -13,10 +13,12 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
-    # Manual ad-hoc signing keeps local builds working without a developer team.
-    # Set a team and switch to Automatic if you want to sign for a device or distribute.
+    # Manual ad-hoc signing keeps local builds working with no developer team. For App Store
+    # distribution set your team and switch to automatic signing, then archive.
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"
+    # Required for App Store submission, and for notarisation outside it.
+    ENABLE_HARDENED_RUNTIME: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEAD_CODE_STRIPPING: YES
 
@@ -42,6 +44,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.graphics-design
+        NSHumanReadableCopyright: Copyright © 2026 Ondrej Li. All rights reserved.
         ITSAppUsesNonExemptEncryption: false
         NSHighResolutionCapable: true
         NSSupportsAutomaticTermination: false
@@ -62,6 +65,7 @@ targets:
         # targets, which needs a team. Set your team here for device builds.
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
+        CODE_SIGN_ENTITLEMENTS: Stitch/Resources/Stitch.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES

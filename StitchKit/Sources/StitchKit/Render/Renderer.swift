@@ -45,7 +45,8 @@ public enum Renderer {
             let metrics = ArrowMetrics(
                 headLength: style.arrowHeadLength,
                 headWidth: style.arrowHeadWidth,
-                shaftWidth: style.arrowShaftWidth
+                bodyWidth: style.arrowBodyWidth,
+                tailWidth: style.arrowTailWidth
             )
             let outline = ArrowGeometry.outline(from: from, to: to, metrics: metrics)
             guard !outline.isEmpty else { return .null }
@@ -78,8 +79,8 @@ public enum Renderer {
 
     static func strokeWidth(kind: FreehandKind, style: AnnotationStyle) -> CGFloat {
         switch kind {
-        case .highlighter: CGFloat(style.lineWidth * style.highlighterWidthFactor)
         case .pen, .eraser: CGFloat(style.lineWidth)
+        case .highlighter: CGFloat(style.lineWidth * style.highlighterWidthFactor)
         }
     }
 
@@ -89,7 +90,8 @@ public enum Renderer {
         let metrics = ArrowMetrics(
             headLength: style.arrowHeadLength,
             headWidth: style.arrowHeadWidth,
-            shaftWidth: style.arrowShaftWidth
+            bodyWidth: style.arrowBodyWidth,
+            tailWidth: style.arrowTailWidth
         )
         guard let path = ArrowGeometry.path(from: from, to: to, metrics: metrics) else { return }
 

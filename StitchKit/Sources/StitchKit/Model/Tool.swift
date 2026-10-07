@@ -39,6 +39,14 @@ public enum ToolID: String, Codable, CaseIterable, Sendable {
     public var isLinear: Bool {
         self == .arrow || self == .line
     }
+
+    /// A compact label for the sub-tool picker, where the full name would be clipped.
+    public var pickerName: String {
+        switch self {
+        case .roundedRectangle: "Rounded"
+        default: displayName
+        }
+    }
 }
 
 /// A toolbar slot. Slots with more than one tool show the submenu chevron.

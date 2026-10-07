@@ -162,7 +162,8 @@ public struct ToolSession {
         let metrics = style.arrowMetrics(forLength: Double(length))
         style.arrowHeadLength = metrics.headLength
         style.arrowHeadWidth = metrics.headWidth
-        style.arrowShaftWidth = metrics.shaftWidth
+        style.arrowBodyWidth = metrics.bodyWidth
+        style.arrowTailWidth = metrics.tailWidth
         return style
     }
 

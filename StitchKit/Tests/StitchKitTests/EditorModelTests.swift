@@ -101,29 +101,54 @@ struct EditorModelTests {
         #expect(model.canvasSize == .zero)
     }
 
-    @Test("Default stroke and font sizes scale with the image")
+    /// Thickness is an explicit user choice with a fixed default, so loading an image must not
+    /// change it. Text and stamps are content-relative and do scale.
+    @Test("Loading an image keeps the thickness but scales text and stamps")
     func styleDefaults() {
         let model = EditorModel()
         model.style.stroke = .blue
         model.load(image: makeSolidImage(width: 800, height: 600))
 
-        #expect(model.style.lineWidth == 1.5)
-        #expect(model.style.fontSize == 20)
-        #expect(model.style.stampSize == 50)
-        #expect(model.style.arrowHeadLength == 6.75)
+        // Text and stamp sizes key off the shorter side (600), not the width.
+        let expectedFontSize: Double = 600.0 / 30
+        let expectedStampSize: Double = 600.0 / 12
+        #expect(model.style.lineWidth == 15)
+        #expect(model.style.fontSize == expectedFontSize)
+        #expect(model.style.stampSize == expectedStampSize)
+        // The arrow fields stay coherent with the thickness. Compared against the same
+        // computation rather than a literal, because the fractions are not exact in binary.
+        let expectedHeadLength = model.style.arrowMetrics(forLength: 200).headLength
+        #expect(model.style.arrowHeadLength == expectedHeadLength)
         // The chosen colour survives loading a new image.
         #expect(model.style.stroke == .blue)
     }
 
-    @Test("A large image gets thicker defaults, capped at the maximum")
+    @Test("Text and stamp defaults are capped, thickness is not")
     func styleDefaultsAreCapped() {
         let style = EditorModel.styleDefaults(
             basedOn: AnnotationStyle(),
             canvasSize: CGSize(width: 8000, height: 6000)
         )
-        #expect(style.lineWidth == 12)
+        #expect(style.lineWidth == 15)
         #expect(style.fontSize == 96)
         #expect(style.stampSize == 240)
+    }
+
+    @Test("Setting a thickness clamps it and refreshes the arrow fields")
+    func setLineWidth() {
+        let model = loadedModel()
+        model.setLineWidth(24)
+        #expect(model.style.lineWidth == 24)
+
+        // Arrow metrics follow the stroke, and the head keeps its floor.
+        let metrics = model.style.arrowMetrics(forLength: 200)
+        #expect(model.style.arrowHeadLength == metrics.headLength)
+        #expect(model.style.arrowBodyWidth == metrics.bodyWidth)
+
+        model.setLineWidth(1000)
+        #expect(model.style.lineWidth == 80)
+        model.setLineWidth(0)
+        #expect(model.style.lineWidth == 1)
     }
 
     @Test("A zero-sized canvas leaves the style alone")
@@ -210,10 +235,15 @@ struct EditorModelTests {
         model.updateStroke(to: CGPoint(x: 90, y: 45))
 
         let preview = try #require(model.preview)
-        // The overlay is clipped to the shape's own bounds, and is transparent wherever the
-        // shape does not paint.
-        #expect(preview.rect.width < 60)
-        #expect(preview.rect.height < 35)
+        // The overlay is clipped to the shape's own bounds — the 50x25 drag plus half a
+        // thickness on each side — and is transparent wherever the shape does not paint.
+        // Derived from the style so this does not need touching when the default changes.
+        let thickness = CGFloat(model.style.lineWidth)
+        let expectedWidth = 50 + thickness * 2
+        let expectedHeight = 25 + thickness * 2
+        #expect(preview.rect.width == expectedWidth)
+        #expect(preview.rect.height == expectedHeight)
+        #expect(preview.rect.width < 120, "the overlay must not cover the whole canvas")
         #expect(pixel(preview.image, 0, 0).isTransparent)
         #expect(preview.blendMode == .normal)
     }
@@ -346,6 +376,35 @@ struct EditorModelTests {
 
         model.undo()
         #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+    }
+
+    @Test("Asking to clear does not clear, so the view can confirm first")
+    func requestClearDoesNotClear() throws {
+        let model = loadedModel(width: 60, height: 60)
+        drawRedRectangle(on: model)
+
+        model.requestClear()
+
+        // The request is only a signal; the destructive action stays with the view's
+        // confirmation, so the canvas is untouched until the user agrees.
+        #expect(model.clearRequestCount == 1)
+        #expect(model.canvasSize == CGSize(width: 60, height: 60))
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+
+        model.requestClear()
+        #expect(model.clearRequestCount == 2)
+        #expect(isColour(try #require(model.canvasImage), 25, 25, .stitchRed))
+    }
+
+    @Test("The menu's clear request is ignored when there is nothing to clear")
+    func clearRequestWhenBusy() {
+        let model = EditorModel()
+        #expect(!model.canExport, "no document yet")
+
+        // The view only shows the confirmation when the canvas can actually be cleared.
+        model.requestClear()
+        #expect(model.clearRequestCount == 1)
+        #expect(!model.hasImage)
     }
 
     @Test("Clearing is refused while cropping, so a staged crop is not lost")

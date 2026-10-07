@@ -64,6 +64,56 @@ public enum ImageOps {
         return image.cropping(to: target)
     }
 
+    /// Crops to a rect that is allowed to reach **past** the image, growing the canvas.
+    ///
+    /// The rect is in image coordinates and may have a negative origin. Anything outside the
+    /// image is filled with `background`; `nil` leaves it transparent, which is what the
+    /// "keep transparency" mode wants.
+    ///
+    /// When the rect sits entirely inside the image this defers to `cropped(_:to:)`, so an
+    /// ordinary crop stays an exact pixel copy with no resampling.
+    public static func expanded(
+        _ image: CGImage,
+        to rect: CGRect,
+        background: RGBAColor?
+    ) -> CGImage? {
+        let target = Geometry.integralBounds(rect)
+        guard target.width >= 1, target.height >= 1 else { return nil }
+
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        if bounds.contains(target) {
+            return cropped(image, to: target)
+        }
+
+        guard let context = BitmapContextFactory.make(
+            width: Int(target.width),
+            height: Int(target.height),
+            colorSpace: BitmapContextFactory.preferredColorSpace(for: image),
+            flipped: true
+        ) else {
+            return nil
+        }
+
+        if let background {
+            context.setFillColor(background.cgColor)
+            context.fill(CGRect(origin: .zero, size: target.size))
+        }
+
+        // Place the image at its position within the crop, in the same y-down space the rest of
+        // the pipeline uses, so the surviving pixels stay where they were.
+        ImageDrawing.drawUpright(
+            image,
+            in: CGRect(
+                x: -target.minX,
+                y: -target.minY,
+                width: CGFloat(image.width),
+                height: CGFloat(image.height)
+            ),
+            context: context
+        )
+        return context.makeImage()
+    }
+
     /// Composites the image onto an opaque colour, dropping the alpha channel.
     public static func flattened(_ image: CGImage, onto color: RGBAColor) -> CGImage? {
         guard let context = BitmapContextFactory.make(

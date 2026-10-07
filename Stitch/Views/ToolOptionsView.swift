@@ -35,13 +35,11 @@ struct ToolOptionsView: View {
                         .foregroundStyle(.secondary)
                 }
                 fillToggle
-                strokeSlider
 
             case .draw:
-                strokeSlider
-                if model.activeTool == .highlighter {
-                    labelledSlider("Highlight width", value: $model.style.highlighterWidthFactor, range: 2...10)
-                }
+                // Nothing beyond the sub-tool picker: thickness has a dedicated well in the
+                // tool strip, so repeating it here would be two controls for one value.
+                EmptyView()
 
             case .stamp:
                 StampPickerView()
@@ -51,7 +49,17 @@ struct ToolOptionsView: View {
             }
         }
         .padding(14)
-        .frame(width: group == .text ? 320 : 260)
+        .frame(width: panelWidth)
+    }
+
+    /// Wide enough that the four shape sub-tools are not clipped. A segmented picker sizes
+    /// itself to its widest label, so "Rounded rectangle" sets the floor here.
+    private var panelWidth: CGFloat {
+        switch group {
+        case .text: 340
+        case .shape: 430
+        default: 270
+        }
     }
 
     private var header: some View {
@@ -78,7 +86,7 @@ struct ToolOptionsView: View {
     private var subToolPicker: some View {
         Picker("Tool", selection: toolBinding) {
             ForEach(group.tools, id: \.self) { tool in
-                Label(tool.displayName, systemImage: group.symbolName(for: tool)).tag(tool)
+                Text(tool.pickerName).tag(tool)
             }
         }
         .pickerStyle(.segmented)
@@ -89,17 +97,6 @@ struct ToolOptionsView: View {
         Binding(
             get: { model.activeTool },
             set: { model.select(tool: $0) }
-        )
-    }
-
-    private var strokeSlider: some View {
-        labelledSlider("Thickness", value: lineWidthBinding, range: 1...40)
-    }
-
-    private var lineWidthBinding: Binding<Double> {
-        Binding(
-            get: { model.style.lineWidth },
-            set: { model.setLineWidth($0) }
         )
     }
 
@@ -146,7 +143,8 @@ struct ToolOptionsPanel: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 276)
-        .background(Theme.toolbarBackground)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .padding(.vertical, 10)
+        .padding(.trailing, 6)
     }
 }

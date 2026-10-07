@@ -10,6 +10,7 @@ struct EditorView: View {
     @State private var exportDocument: PNGFileDocument?
     @State private var isExporting = false
     @State private var errorMessage: String?
+    @State private var isConfirmingClear = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,21 +60,41 @@ struct EditorView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        // Wiping a pasted screenshot is worth one extra step from either entry point, the
+        // action-bar trash button or the menu shortcut.
+        .alert("Clear the canvas?", isPresented: $isConfirmingClear) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) { model.clearCanvas() }
+        } message: {
+            Text("This replaces the image with a blank canvas. You can undo it with ⌘Z.")
+        }
         .onChange(of: model.importRequestCount) { _, _ in isImporting = true }
         .onChange(of: model.exportRequestCount) { _, _ in prepareExport() }
+        .onChange(of: model.clearRequestCount) { _, _ in
+            // Nothing to clear, or a crop is staged: ignore rather than ask pointlessly.
+            guard model.canExport else { return }
+            isConfirmingClear = true
+        }
         .onAppear(perform: startSession)
     }
 
     // MARK: - Image intake
 
-    /// The clipboard is the default source: a fresh launch picks up whatever image is on it,
-    /// and otherwise starts a blank canvas so the window is immediately drawable.
+    /// Starts the session. On macOS the clipboard image loads automatically, since the app is
+    /// built around "whatever you just copied".
+    ///
+    /// iOS is deliberately different: reading the pasteboard without the user asking triggers
+    /// the system's "Allow Paste?" consent prompt, so the app opens on a blank canvas and waits
+    /// for an explicit Paste. That is both the documented behaviour Apple expects and the less
+    /// alarming experience.
     private func startSession() {
+        #if os(macOS)
         if let image = ImagePasteboard.readImage() {
             model.load(image: image)
-        } else {
-            model.loadBlankCanvas()
+            return
         }
+        #endif
+        model.loadBlankCanvas()
     }
 
     private func pasteFromClipboard() {

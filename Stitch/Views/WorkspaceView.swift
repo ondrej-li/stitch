@@ -78,7 +78,9 @@ struct WorkspaceView: View {
     @ViewBuilder
     private func previewLayer(transform: CanvasTransform) -> some View {
         if let preview = model.preview {
-            let rect = transform.viewRect(fromCanvas: preview.rect)
+            // Content coordinates: the scroll view positions the content, so the fit offset
+            // must not be applied here or the overlay lands beside the image.
+            let rect = transform.contentRect(fromCanvas: preview.rect)
             Image(decorative: preview.image, scale: 1)
                 .resizable()
                 .interpolation(.high)
@@ -108,10 +110,14 @@ struct WorkspaceView: View {
                     model.beginStroke(at: point)
                 }
             }
-            .onEnded { _ in
+            .onEnded { value in
                 let wasActive = isGestureActive
                 isGestureActive = false
                 guard wasActive, model.activeTool != .text else { return }
+                // Apply the release location first: `onChanged` can lag behind the real
+                // mouse-up point, which made the committed arrow stop short of where the
+                // user let go.
+                model.updateStroke(to: canvasPoint(value.location))
                 model.endStroke()
             }
     }
@@ -203,7 +209,8 @@ struct TextSessionOverlay: View {
 
     var body: some View {
         if let session = model.textSession {
-            let origin = transform.viewPoint(fromCanvas: session.origin)
+            // Content coordinates, like the preview overlay.
+            let origin = transform.contentPoint(fromCanvas: session.origin)
 
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Text", text: $draft, axis: .vertical)

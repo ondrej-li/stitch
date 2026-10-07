@@ -38,8 +38,35 @@ struct RendererTests {
         #expect(bounds == CGRect(x: 4, y: 4, width: 32, height: 32))
     }
 
-    @Test("Highlighter bounds are wider than pen bounds for the same points")
-    func highlighterBounds() {
+    @Test("The default thickness is 15 for line-based tools and freehand alike")
+    func defaultThickness() {
+        let defaultStyle = AnnotationStyle()
+        #expect(defaultStyle.lineWidth == 15)
+
+        // The marker and eraser draw at the shared thickness, not a multiple of it.
+        #expect(Renderer.strokeWidth(kind: .pen, style: defaultStyle) == 15)
+        #expect(Renderer.strokeWidth(kind: .eraser, style: defaultStyle) == 15)
+
+        // Shape outlines use it directly, so the bounds grow by half a thickness each side.
+        let rectangle = Renderer.bounds(
+            of: .rectangle(CGRect(x: 10, y: 10, width: 20, height: 20), style: defaultStyle)
+        )
+        let expectedWidth: CGFloat = 20 + 15 * 2
+        #expect(rectangle.width == expectedWidth)
+    }
+
+    @Test("Only the highlighter is wider than the shared thickness")
+    func highlighterIsTheOnlyWideStroke() {
+        let penStyle = style(lineWidth: 10)
+        let marker = Renderer.strokeWidth(kind: .pen, style: penStyle)
+        let highlighter = Renderer.strokeWidth(kind: .highlighter, style: penStyle)
+
+        #expect(highlighter > marker)
+        #expect(highlighter == marker * CGFloat(penStyle.highlighterWidthFactor))
+    }
+
+    @Test("Freehand bounds follow the stroke width")
+    func freehandBounds() {
         let points = [CGPoint(x: 20, y: 20), CGPoint(x: 40, y: 20)]
         let penStyle = style(lineWidth: 4)
         let pen = Renderer.bounds(of: .freehand(kind: .pen, points: points, style: penStyle))
@@ -48,13 +75,12 @@ struct RendererTests {
         )
 
         // A flat line has no height of its own, so the bounds are just the stroke.
-        // Note: comparing a CGFloat against an integer-literal expression mis-evaluates
-        // under #expect, so the expected values are typed up front.
-        let expectedPenThickness: CGFloat = 8
-        let expectedHighlighterThickness: CGFloat = 4 * CGFloat(penStyle.highlighterWidthFactor)
+        // Comparing a CGFloat against an integer-literal expression mis-evaluates under
+        // #expect, so the expected values are typed up front.
+        let expectedPenThickness = Renderer.strokeWidth(kind: .pen, style: penStyle) * 2
+        let expectedHighlighterThickness = Renderer.strokeWidth(kind: .highlighter, style: penStyle) * 2
         #expect(pen.height == expectedPenThickness)
-        #expect(Renderer.strokeWidth(kind: .highlighter, style: penStyle) == expectedHighlighterThickness)
-        #expect(highlighter.height == expectedHighlighterThickness * 2)
+        #expect(highlighter.height == expectedHighlighterThickness)
         #expect(highlighter.height > pen.height)
     }
 
@@ -118,11 +144,12 @@ struct RendererTests {
     func eraserClears() throws {
         let canvas = CanvasBitmap(width: 40, height: 40)
         canvas.fill(CGRect(x: 0, y: 0, width: 40, height: 40), with: .white)
+        // The eraser is a broad nib, so a small line width still clears a usable band.
         Renderer.draw(
             .freehand(
                 kind: .eraser,
                 points: [CGPoint(x: 5, y: 20), CGPoint(x: 35, y: 20)],
-                style: style(lineWidth: 10)
+                style: style(lineWidth: 2)
             ),
             in: canvas.context
         )
@@ -170,9 +197,10 @@ struct RendererTests {
             return try #require(canvas.makeImage())
         }
 
-        // A 3pt pen covers y 18.5...21.5; the 12pt highlighter covers y 14...26.
-        #expect(isColour(try drawn(kind: .pen), 20, 15, .transparent, tolerance: 0))
-        #expect(containsOpaquePixel(try drawn(kind: .highlighter), in: CGRect(x: 19, y: 15, width: 3, height: 1)))
+        // A lineWidth of 3 covers y 18.5...21.5; the 5.4pt highlighter covers 17.3...22.7,
+        // so y 17 is outside the marker but inside the highlighter.
+        #expect(isColour(try drawn(kind: .pen), 20, 17, .transparent, tolerance: 0))
+        #expect(containsOpaquePixel(try drawn(kind: .highlighter), in: CGRect(x: 19, y: 17, width: 3, height: 1)))
     }
 
     @Test("A single tap leaves a dot")

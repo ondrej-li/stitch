@@ -15,6 +15,12 @@ struct CropStageView: View {
         let frame = transform.viewRect(fromCanvas: stagedBounds)
 
         ZStack {
+            // What the crop will add beyond the image, previewed behind the image so the
+            // overlapping part is simply covered by the real pixels.
+            if let session = model.cropSession, session.expandsCanvas {
+                expansionPreview(session: session, transform: transform)
+            }
+
             if let image = model.displayedImage {
                 Image(decorative: image, scale: 1)
                     .resizable()
@@ -27,7 +33,8 @@ struct CropStageView: View {
             if model.cropSession != nil {
                 CropOverlayView(
                     transform: transform,
-                    canvasBounds: stagedBounds,
+                    imageBounds: stagedBounds,
+                    limits: model.cropSession?.expansionLimits ?? stagedBounds,
                     cropRect: model.cropSession?.cropRect ?? stagedBounds,
                     onChange: { model.setCropRect($0) }
                 )
@@ -38,6 +45,24 @@ struct CropStageView: View {
                 Spacer(minLength: 0)
             }
             .padding(16)
+        }
+    }
+
+    /// Previews the area the crop will add, filled exactly as Apply will fill it.
+    @ViewBuilder
+    private func expansionPreview(session: CropSession, transform: CanvasTransform) -> some View {
+        let rect = transform.viewRect(fromCanvas: session.cropRect)
+
+        if let background = model.alphaMode.backgroundColor {
+            Rectangle()
+                .fill(Color(background))
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+        } else {
+            // Keep-transparency: show the checkerboard, so the empty area reads as empty.
+            CheckerboardView()
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
         }
     }
 
@@ -54,10 +79,18 @@ struct CropStageView: View {
 
             Spacer(minLength: 12)
 
-            if let rect = model.cropSession?.cropRect {
-                Text("\(Int(rect.width)) × \(Int(rect.height))")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(Theme.icon)
+            if let session = model.cropSession {
+                HStack(spacing: 8) {
+                    Text("\(Int(session.cropRect.width)) × \(Int(session.cropRect.height))")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(Theme.icon)
+
+                    if session.expandsCanvas {
+                        Label("Expands canvas", systemImage: "arrow.up.left.and.arrow.down.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
             }
 
             Spacer(minLength: 12)
@@ -66,14 +99,14 @@ struct CropStageView: View {
                 Button("Reset") { model.resetCropRect() }
                 Button("Cancel", role: .cancel) { model.cancelCrop() }
                 Button("Apply") { model.applyCrop() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .disabled(model.cropSession?.isNoOp ?? true)
             }
         }
         .controlSize(.regular)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.regularMaterial, in: Capsule())
+        .glassEffect(.regular, in: .capsule)
     }
 
     /// Free straighten, sitting between the two flip buttons as in the reference.
@@ -113,8 +146,10 @@ struct CropStageView: View {
 /// drag-to-move inside and drag-to-create outside.
 struct CropOverlayView: View {
     let transform: CanvasTransform
-    /// Staged image bounds in canvas coordinates — the clamp region.
-    let canvasBounds: CGRect
+    /// The staged image bounds, in canvas coordinates.
+    let imageBounds: CGRect
+    /// How far the crop may reach, which extends past `imageBounds` so the canvas can grow.
+    let limits: CGRect
     let cropRect: CGRect
     let onChange: (CGRect) -> Void
 
@@ -123,6 +158,13 @@ struct CropOverlayView: View {
     private static let handleTouch: CGFloat = 26
 
     @State private var gestureStartRect: CGRect?
+
+    /// True while the crop still covers the whole image. In that state there is no "outside"
+    /// to start a new rect from, and dragging inside must define the crop rather than slide the
+    /// whole frame — otherwise the default silently becomes an off-centre crop.
+    private var isFullFrame: Bool {
+        cropRect.integral == imageBounds.integral
+    }
 
     private enum Handle: CaseIterable {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
@@ -226,7 +268,8 @@ struct CropOverlayView: View {
 
     // MARK: - Interaction
 
-    /// Starts a brand new crop rect when the drag begins outside the current one.
+    /// Starts a new crop rect when the drag begins outside the current one — or anywhere at all
+    /// while the crop is still the full frame, since that is the first gesture a user makes.
     private func createLayer(full: CGRect) -> some View {
         Color.clear
             .contentShape(Rectangle())
@@ -234,8 +277,8 @@ struct CropOverlayView: View {
                 DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
                     .onChanged { value in
                         if gestureStartRect == nil {
-                            // Ignore drags that begin inside the crop rect.
-                            guard !transform.viewRect(fromCanvas: cropRect).contains(value.startLocation) else { return }
+                            let beganInside = transform.viewRect(fromCanvas: cropRect).contains(value.startLocation)
+                            guard !beganInside || isFullFrame else { return }
                             gestureStartRect = cropRect
                         }
                         let start = transform.canvasPoint(fromView: value.startLocation)
@@ -252,22 +295,27 @@ struct CropOverlayView: View {
             )
     }
 
+    /// Dragging inside the rect moves it — but not while it is the full frame, where there is
+    /// nothing to move it to.
+    @ViewBuilder
     private func moveLayer(rect: CGRect) -> some View {
-        Color.clear
-            .frame(width: max(rect.width, 1), height: max(rect.height, 1))
-            .contentShape(Rectangle())
-            .offset(x: rect.minX, y: rect.minY)
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
-                    .onChanged { value in
-                        let base = gestureStartRect ?? cropRect
-                        if gestureStartRect == nil { gestureStartRect = base }
-                        let dx = value.translation.width / transform.zoom
-                        let dy = value.translation.height / transform.zoom
-                        onChange(clamp(base.offsetBy(dx: dx, dy: dy)))
-                    }
-                    .onEnded { _ in gestureStartRect = nil }
-            )
+        if !isFullFrame {
+            Color.clear
+                .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+                .contentShape(Rectangle())
+                .offset(x: rect.minX, y: rect.minY)
+                .gesture(
+                    DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
+                        .onChanged { value in
+                            let base = gestureStartRect ?? cropRect
+                            if gestureStartRect == nil { gestureStartRect = base }
+                            let dx = value.translation.width / transform.zoom
+                            let dy = value.translation.height / transform.zoom
+                            onChange(clamp(base.offsetBy(dx: dx, dy: dy)))
+                        }
+                        .onEnded { _ in gestureStartRect = nil }
+                )
+        }
     }
 
     private func handleView(_ handle: Handle, rect: CGRect) -> some View {
@@ -297,7 +345,7 @@ struct CropOverlayView: View {
     }
 
     private func clamp(_ rect: CGRect) -> CGRect {
-        let integral = rect.standardized.integral.intersection(canvasBounds)
+        let integral = rect.standardized.integral.intersection(limits)
         guard integral.width >= 1, integral.height >= 1 else { return cropRect }
         return integral
     }

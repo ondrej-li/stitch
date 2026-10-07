@@ -122,15 +122,24 @@ public final class ImageDocument {
 
     // MARK: - Whole-image operations
 
-    /// Bakes the staged crop menu transform as a single undoable step.
+    /// Bakes the staged crop menu transform and crop rect as a single undoable step.
+    ///
+    /// The crop rect may reach past the image, in which case the canvas grows and the new area
+    /// is filled with `background` (`nil` leaves it transparent).
     @discardableResult
-    public func applyCrop(cropRect: CGRect, transform: CropTransform) -> Bool {
+    public func applyCrop(
+        cropRect: CGRect,
+        transform: CropTransform,
+        background: RGBAColor? = nil
+    ) -> Bool {
         guard let original = canvas.makeImage() else { return false }
         guard let transformed = ImageOps.transformed(original, transform) else { return false }
-        guard let cropped = ImageOps.cropped(transformed, to: cropRect) else { return false }
+        guard let result = ImageOps.expanded(transformed, to: cropRect, background: background) else {
+            return false
+        }
 
-        canvas.replace(with: cropped, scale: canvas.scale)
-        history.push(.canvas(before: original, after: cropped))
+        canvas.replace(with: result, scale: canvas.scale)
+        history.push(.canvas(before: original, after: result))
         invalidate()
         return true
     }

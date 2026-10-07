@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox is required for Mac App Store distribution. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Opening and saving images through the system panels, and files dropped onto the
+	     window, which the sandbox extends temporary access to. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Deliberately absent: network access, screen recording, camera, microphone, contacts,
+	     calendars, location. Stitch only touches one image at a time and never sends anything
+	     anywhere, so it needs none of them. -->
+</dict>
+</plist>

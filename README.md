@@ -168,3 +168,53 @@ Stitch/                      SwiftUI app
 - **StitchKit tests** — `swift test` (unit tests).
 - **Build app** — a clean `xcodegen generate`, then a Debug build for macOS *and* for
   the iOS Simulator.
+
+## Distribution
+
+The app is built to be App Store-ready. The pieces are in place:
+
+| Requirement | Where |
+|---|---|
+| **App Sandbox** (mandatory for the Mac App Store) | [Stitch.entitlements](./Stitch/Resources/Stitch.entitlements) |
+| File access for the open/save panels and drag-and-drop | `com.apple.security.files.user-selected.read-write` |
+| **Privacy manifest** | [PrivacyInfo.xcprivacy](./Stitch/Resources/PrivacyInfo.xcprivacy) |
+| Icon without an alpha channel (iOS requirement) | `AppIcon.appiconset/icon_ios_1024.png` |
+| Encryption declaration | `ITSAppUsesNonExemptEncryption: false` |
+| Hardened runtime | `ENABLE_HARDENED_RUNTIME` |
+
+**Deliberately absent entitlements.** Stitch requests no network access, no screen
+recording, no camera, no microphone, no contacts, no calendars and no location. It needs
+none of them: it reads one image, edits it in memory, and writes it back only where the
+user asks. There is no networking code in the app at all.
+
+**Privacy.** Nothing is collected, nothing is transmitted, and no data leaves the device,
+so `NSPrivacyTracking` is `false` and the collected-data and required-reason-API lists are
+both empty — Stitch calls none of the required-reason APIs directly.
+
+**Clipboard access on iOS.** Reading the pasteboard without the user asking triggers the
+system's "Allow Paste?" prompt, so iOS opens on a blank canvas and waits for an explicit
+Paste; only macOS auto-loads on launch. The `hasImages` check used to enable the Paste
+button is the prompt-free one.
+
+### To archive for submission
+
+Local builds use manual ad-hoc signing so they work with no developer team. Submission
+needs a real team:
+
+1. Set `CODE_SIGN_STYLE` to `Automatic` and add your `DEVELOPMENT_TEAM`
+   (either in [project.yml](./project.yml) or in Xcode's Signing & Capabilities editor).
+2. `xcodegen generate`, then **Product → Archive** and upload via Xcode Organizer or
+   `xcrun altool`.
+
+Note that `get-task-allow` appears in Debug entitlements so the debugger can attach; it is
+stripped automatically in Release, which is what gets submitted.
+
+## Licence
+
+[MIT](./LICENSE) © 2026 Ondrej Li.
+
+The project was originally GPLv3, which Apple's terms are incompatible with — the App
+Store's usage and DRM restrictions are exactly what the GPL forbids, so GPL-licensed apps
+cannot be submitted. It was relicensed to MIT, which is App Store compatible, so the
+licensing no longer blocks distribution.
+

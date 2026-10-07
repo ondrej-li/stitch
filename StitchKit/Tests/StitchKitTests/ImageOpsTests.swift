@@ -190,3 +190,83 @@ struct ImageExporterTests {
         #expect(AlphaMode.blackBackground.backgroundColor == .black)
     }
 }
+
+@Suite("Canvas expansion")
+struct ExpansionTests {
+    private func edgeImage() -> CGImage {
+        // Left half opaque red, right half transparent, so the image edge is unambiguous.
+        makeImage(width: 4, height: 4) { x, _ in
+            x < 2 ? (255, 0, 0, 255) : (0, 0, 0, 0)
+        }
+    }
+
+    @Test("A crop inside the image is still an exact copy")
+    func containedCropIsUnchanged() throws {
+        let source = makeCoordinateImage(width: 8, height: 8)
+        let cropped = try #require(ImageOps.expanded(source, to: CGRect(x: 2, y: 2, width: 3, height: 3), background: .white))
+        #expect(cropped.width == 3)
+        #expect(cropped.height == 3)
+        #expect(pixel(cropped, 0, 0) == pixel(source, 2, 2))
+    }
+
+    @Test("Growing the canvas fills the new area with the background colour")
+    func expandsWithWhite() throws {
+        let source = makeSolidImage(width: 4, height: 4, rgba: (0, 128, 255, 255))
+        let expanded = try #require(
+            ImageOps.expanded(source, to: CGRect(x: -2, y: -2, width: 8, height: 8), background: .white)
+        )
+
+        #expect(expanded.width == 8)
+        #expect(expanded.height == 8)
+        // Corners are the new area, the middle is the original image.
+        #expect(isColour(expanded, 0, 0, .white))
+        #expect(isColour(expanded, 7, 7, .white))
+        let centre = pixel(expanded, 4, 4)
+        #expect(centre.isClose(to: PixelGrid.RGBA(red: 0, green: 128, blue: 255, alpha: 255)))
+    }
+
+    @Test("A black background fills with black")
+    func expandsWithBlack() throws {
+        let source = makeSolidImage(width: 4, height: 4, rgba: (0, 128, 255, 255))
+        let expanded = try #require(
+            ImageOps.expanded(source, to: CGRect(x: 0, y: 0, width: 8, height: 8), background: .black)
+        )
+        #expect(isColour(expanded, 7, 7, .black))
+        #expect(pixel(expanded, 1, 1).isClose(to: PixelGrid.RGBA(red: 0, green: 128, blue: 255, alpha: 255)))
+    }
+
+    @Test("Keep-transparency leaves the new area transparent")
+    func expandsTransparent() throws {
+        let source = makeSolidImage(width: 4, height: 4, rgba: (0, 128, 255, 255))
+        let expanded = try #require(
+            ImageOps.expanded(source, to: CGRect(x: 0, y: 0, width: 8, height: 8), background: nil)
+        )
+        #expect(pixel(expanded, 7, 7).isTransparent)
+        #expect(pixel(expanded, 1, 1).isOpaque)
+    }
+
+    @Test("Expansion on one side only, preserving where the image sits")
+    func expandsOneSide() throws {
+        let source = makeSolidImage(width: 4, height: 4, rgba: (255, 0, 0, 255))
+        // Extend to the right by 4px only.
+        let expanded = try #require(
+            ImageOps.expanded(source, to: CGRect(x: 0, y: 0, width: 8, height: 4), background: .white)
+        )
+        #expect(isColour(expanded, 1, 1, .white) == false, "the original image stays on the left")
+        #expect(isColour(expanded, 6, 1, .white), "the added strip is on the right")
+    }
+
+    @Test("A zero-area expansion fails, and sub-pixel rects round outward to a whole pixel")
+    func degenerateExpansion() throws {
+        let source = makeSolidImage(width: 8, height: 8)
+        #expect(ImageOps.expanded(source, to: .zero, background: .white) == nil)
+
+        // Consistency with the rest of the pipeline: crop rects are integralised outward, so a
+        // sliver still yields a 1px image rather than failing.
+        let sliver = try #require(
+            ImageOps.expanded(source, to: CGRect(x: 0, y: 0, width: 0.2, height: 4), background: .white)
+        )
+        #expect(sliver.width == 1)
+        #expect(sliver.height == 4)
+    }
+}

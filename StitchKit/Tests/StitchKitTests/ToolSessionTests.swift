@@ -58,7 +58,8 @@ struct ToolSessionTests {
             return ArrowMetrics(
                 headLength: style.arrowHeadLength,
                 headWidth: style.arrowHeadWidth,
-                shaftWidth: style.arrowShaftWidth
+                bodyWidth: style.arrowBodyWidth,
+                tailWidth: style.arrowTailWidth
             )
         }
 
@@ -67,11 +68,11 @@ struct ToolSessionTests {
 
         #expect(short.headLength < long.headLength)
         #expect(short.headWidth < long.headWidth)
-        #expect(abs(long.headLength - 180) < 0.001)
-        #expect(abs(long.headWidth - 153) < 0.001)
+        #expect(abs(long.headLength - 168) < 0.001)
+        #expect(abs(long.headWidth - 164.64) < 0.001)
     }
 
-    @Test("A stubby arrow keeps a head proportional to its thickness")
+    @Test("A stubby arrow keeps a visible head without it eating the arrow")
     func arrowHeadHasAThicknessFloor() throws {
         var session = ToolSession(tool: .arrow, style: makeStyle())
         session.begin(at: CGPoint(x: 0, y: 0))
@@ -81,10 +82,10 @@ struct ToolSessionTests {
             Issue.record("expected an arrow")
             return
         }
-        // 20 * 0.30 = 6, below the max(6, 4 * 3) = 12 floor.
-        #expect(style.arrowHeadLength == 12)
-        #expect(style.arrowShaftWidth > 0)
-        #expect(style.arrowShaftWidth < style.arrowHeadWidth)
+        // 20 * 0.28 = 5.6, lifted to the 6pt minimum and still well inside the 15pt cap.
+        #expect(style.arrowHeadLength == 6)
+        #expect(style.arrowTailWidth < style.arrowBodyWidth)
+        #expect(style.arrowBodyWidth < style.arrowHeadWidth)
     }
 
     @Test("A zero-length arrow is not drawn at all")
@@ -104,7 +105,8 @@ struct ToolSessionTests {
         _ = try #require(session.annotation)
 
         #expect(session.style.arrowHeadLength == style.arrowHeadLength)
-        #expect(session.style.arrowShaftWidth == style.arrowShaftWidth)
+        #expect(session.style.arrowBodyWidth == style.arrowBodyWidth)
+        #expect(session.style.arrowTailWidth == style.arrowTailWidth)
     }
 
     @Test("A press that never moves counts as a click")

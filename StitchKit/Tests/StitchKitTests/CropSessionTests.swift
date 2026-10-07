@@ -58,12 +58,44 @@ struct CropSessionTests {
         #expect(pixel(session.stagedImage, 39, 0) == PixelGrid.RGBA(red: 0, green: 0, blue: 0, alpha: 255))
     }
 
-    @Test("Setting a crop rect clamps it to the staged image")
+    @Test("Setting a crop rect clamps it to the expansion limits, not the image")
     func cropRectClamping() {
         var session = makeSession()
         session.setCropRect(CGRect(x: 30, y: 15, width: 100, height: 100))
-        #expect(session.stagedBounds.contains(session.cropRect))
+        // It may now reach past the image, so the limits are the clamp region.
+        #expect(session.expansionLimits.contains(session.cropRect))
         #expect(!session.isNoOp)
+    }
+
+    @Test("The crop may reach past the image, but only so far")
+    func expansionIsBounded() {
+        var session = makeSession(width: 40, height: 20)
+
+        session.setCropRect(CGRect(x: -1000, y: -1000, width: 5000, height: 5000))
+        #expect(session.expansionLimits.contains(session.cropRect))
+        // Half the image per side: 40 wide grows to 80, 20 tall to 40.
+        #expect(session.cropRect.width <= 80)
+        #expect(session.cropRect.height <= 40)
+    }
+
+    @Test("Reaching past the image is reported as expanding the canvas")
+    func expandsCanvasFlag() {
+        var session = makeSession(width: 40, height: 20)
+        #expect(!session.expandsCanvas)
+
+        session.setCropRect(CGRect(x: -10, y: 0, width: 60, height: 20))
+        #expect(session.expandsCanvas)
+        #expect(!session.isCropFullFrame)
+    }
+
+    @Test("Aspect presets keep their ratio while allowed to expand")
+    func aspectConstrainedExpansion() {
+        var session = makeSession(width: 100, height: 100)
+        session.setAspect(.sixteenNine)
+
+        let ratio = session.cropRect.width / session.cropRect.height
+        #expect(abs(Double(ratio) - 16.0 / 9.0) < 0.01)
+        #expect(session.expansionLimits.contains(session.cropRect))
     }
 
     @Test("A degenerate crop rect is rejected rather than applied")
@@ -192,7 +224,7 @@ struct CropAspectTests {
     func constrainRecentres() {
         let bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
         let rect = CGRect(x: 90, y: 90, width: 100, height: 100)
-        let constrained = CropAspect.square.constrain(rect, within: bounds)
+        let constrained = CropAspect.square.constrain(rect, imageBounds: bounds, limits: bounds)
         #expect(bounds.contains(constrained))
         #expect(constrained.width == constrained.height)
     }

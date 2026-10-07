@@ -44,12 +44,13 @@ public enum PathSmoothing {
     }
 }
 
+/// Legacy arrow geometry helpers.
 public enum ArrowGeometry {
-    /// The filled outline of a Skitch-style arrow: a tapered shaft running into a barbed head,
-    /// as a single shape.
+    /// The filled silhouette of a Skitch arrow: a body that tapers out from the tail to a
+    /// wider shoulder, then the barbed head.
     ///
-    /// Returns the polygon in order — tail corner, shaft edge, barb, tip, barb, shaft edge,
-    /// tail corner — or an empty array for a degenerate arrow.
+    /// Returns the polygon in order — tail edge, shoulder, barb, tip, barb, shoulder, tail
+    /// edge — or an empty array for a degenerate arrow.
     public static func outline(
         from tail: CGPoint,
         to tip: CGPoint,
@@ -64,24 +65,26 @@ public enum ArrowGeometry {
         // Perpendicular, pointing to one side of the arrow.
         let normal = CGPoint(x: -unit.y, y: unit.x)
 
-        let halfHead = CGFloat(metrics.headWidth) / 2
-        let halfShaft = CGFloat(metrics.shaftWidth) / 2
         // The head can never eat the whole arrow.
         let headLength = min(CGFloat(metrics.headLength), length)
-        let base = CGPoint(x: tip.x - unit.x * headLength, y: tip.y - unit.y * headLength)
+        let halfHead = CGFloat(metrics.headWidth) / 2
+        let halfBody = CGFloat(metrics.bodyWidth) / 2
+        let halfTail = CGFloat(metrics.tailWidth) / 2
+        let shoulder = CGPoint(x: tip.x - unit.x * headLength, y: tip.y - unit.y * headLength)
 
         func offset(_ point: CGPoint, _ amount: CGFloat) -> CGPoint {
             CGPoint(x: point.x + normal.x * amount, y: point.y + normal.y * amount)
         }
 
         return [
-            offset(tail, halfShaft),
-            offset(base, halfShaft),
-            offset(base, halfHead),
+            offset(tail, halfTail),
+            // The body widens linearly from the tail to the shoulder: the taper is the point.
+            offset(shoulder, halfBody),
+            offset(shoulder, halfHead),
             tip,
-            offset(base, -halfHead),
-            offset(base, -halfShaft),
-            offset(tail, -halfShaft),
+            offset(shoulder, -halfHead),
+            offset(shoulder, -halfBody),
+            offset(tail, -halfTail),
         ]
     }
 

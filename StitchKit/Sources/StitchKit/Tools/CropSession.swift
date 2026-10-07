@@ -9,6 +9,9 @@ public enum CropAspect: String, CaseIterable, Codable, Sendable {
     case fourThree
     case sixteenNine
 
+    /// How far past each edge a 4:3 or 16:9 crop may reach, as a fraction of that dimension.
+    static let maximumExpansionFraction: Double = 0.5
+
     public var displayName: String {
         switch self {
         case .free: "Free"
@@ -36,7 +39,7 @@ public enum CropAspect: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Fits the largest rect of this aspect inside `bounds`, centred.
+    /// The largest rect of this aspect that fits inside `bounds`, centred.
     public func defaultRect(in bounds: CGRect) -> CGRect {
         guard let ratio = ratio(originalSize: bounds.size) else { return bounds }
         var width = bounds.width
@@ -53,22 +56,25 @@ public enum CropAspect: String, CaseIterable, Codable, Sendable {
         )
     }
 
-    /// Adjusts a rect so it matches this aspect, anchored on its centre.
-    public func constrain(_ rect: CGRect, within bounds: CGRect) -> CGRect {
-        guard let ratio = ratio(originalSize: bounds.size), rect.width > 0, rect.height > 0 else {
-            return rect.intersection(bounds)
+    /// Adjusts a rect to match this aspect, anchored on its centre.
+    ///
+    /// The ratio comes from `imageBounds` — the aspect presets are ratios of the *image*, not of
+    /// the room the crop is allowed to roam in — while `limits` only bounds where it may sit.
+    public func constrain(_ rect: CGRect, imageBounds: CGRect, limits: CGRect) -> CGRect {
+        guard let ratio = ratio(originalSize: imageBounds.size), rect.width > 0, rect.height > 0 else {
+            return rect.intersection(limits)
         }
 
-        var width = rect.width
+        var width = min(rect.width, limits.width)
         var height = width / CGFloat(ratio)
-        if height > bounds.height {
-            height = bounds.height
+        if height > limits.height {
+            height = limits.height
             width = height * CGFloat(ratio)
         }
 
         let center = CGPoint(
-            x: min(max(rect.midX, bounds.minX + width / 2), bounds.maxX - width / 2),
-            y: min(max(rect.midY, bounds.minY + height / 2), bounds.maxY - height / 2)
+            x: min(max(rect.midX, limits.minX + width / 2), limits.maxX - width / 2),
+            y: min(max(rect.midY, limits.minY + height / 2), limits.maxY - height / 2)
         )
         return CGRect(
             x: center.x - width / 2,
@@ -107,6 +113,22 @@ public struct CropSession {
 
     public var stagedBounds: CGRect {
         CGRect(origin: .zero, size: stagedSize)
+    }
+
+    /// How far past each edge the crop may be dragged.
+    ///
+    /// Bounded rather than unlimited: a crop dragged far out of frame would otherwise allocate
+    /// an enormous bitmap. At half the image per side the canvas can at most quadruple.
+    public var expansionLimits: CGRect {
+        stagedBounds.insetBy(
+            dx: -stagedBounds.width * CropAspect.maximumExpansionFraction,
+            dy: -stagedBounds.height * CropAspect.maximumExpansionFraction
+        )
+    }
+
+    /// True when the crop reaches past the image, so applying it will grow the canvas.
+    public var expandsCanvas: Bool {
+        !stagedBounds.contains(cropRect)
     }
 
     public var isCropFullFrame: Bool {
@@ -161,11 +183,13 @@ public struct CropSession {
         cropRect = newAspect.defaultRect(in: stagedBounds)
     }
 
+    /// Sets the crop rect. It may reach past the image — that is how the canvas grows — but is
+    /// bounded by `expansionLimits`.
     public mutating func setCropRect(_ rect: CGRect) {
         // A sub-pixel drag would otherwise snap to a 1px sliver and lose the selection.
         guard rect.width >= 1, rect.height >= 1 else { return }
-        let clamped = Geometry.integralBounds(rect).intersection(stagedBounds)
+        let clamped = Geometry.integralBounds(rect).intersection(expansionLimits)
         guard clamped.width >= 1, clamped.height >= 1 else { return }
-        cropRect = aspect.constrain(clamped, within: stagedBounds)
+        cropRect = aspect.constrain(clamped, imageBounds: stagedBounds, limits: expansionLimits)
     }
 }
