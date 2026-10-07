@@ -63,20 +63,23 @@ to automatic signing for the `Stitch` target.
 
 ## The app
 
-The toolbar mirrors classic Skitch, top to bottom:
+Commands live in the **real system toolbar** — the macOS window titlebar or the iOS navigation
+bar — so the platform styles them, and their Liquid Glass, itself. The tools are a **floating
+glass palette** on macOS and sit in the **system bottom bar** on iOS/iPadOS, which is why the
+glass there has the image behind it to refract.
 
 | Tool | Options behind the corner chevron |
 |---|---|
-| Arrow | thickness, head length and width |
+| Arrow | none — it scales itself to the drag |
 | Text | font, size, bold/italic/underline, colour, alignment, text background |
-| Rectangle | **rectangle · rounded rectangle · oval · line**, corner radius, fill, thickness |
-| Marker | marker / highlighter / eraser, thickness |
-| — | **Clear** (in the action bar, and ⇧⌘K) wipes the canvas back to a blank sheet, undoably |
-| Stamp | the ✕ ! ? ✓ ♥ badge set, quick emoji, the system emoji picker |
-| Crop | rotate 90° left/right, flip H/V, **straighten**, aspect presets, transparency mode, Apply/Cancel |
-| — divider — | |
-| Foreground colour | palette |
-| Background colour | palette, including "no fill" |
+| Shapes | **rectangle · rounded rectangle · oval · line**, corner radius, fill |
+| Marker | marker / highlighter / eraser |
+| Stamps | the ✕ ! ? ✓ ♥ badges, quick emoji, the system emoji picker |
+| Crop | rotate 90° left/right, flip H/V, **straighten**, aspect presets, transparency, Apply/Cancel |
+| — | colour wells and the thickness well sit below the divider, on macOS in the palette and on iOS in the Style popover |
+
+Thickness has a single home — its own well — and applies to every line-based tool, so the
+drawers never repeat it.
 
 **The arrow matches Skitch**: one solid silhouette — a tapered shaft running into a barbed
 head — whose head, shaft and point all scale with the drag. There is no dialog for it,

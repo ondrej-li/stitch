@@ -1,9 +1,12 @@
 import StitchKit
 import SwiftUI
 
-/// The vertical tool strip, mirroring the reference screenshot: the six tools, a
-/// divider, then the foreground and background colour wells.
-struct ToolbarView: View {
+/// The floating tool palette: the six tool slots, a divider, then the colour and thickness
+/// wells.
+///
+/// Mounted as an overlay on the canvas rather than a docked strip, which is what lets the glass
+/// actually refract the image behind it instead of sitting over a flat backdrop.
+struct ToolPaletteView: View {
     @Environment(EditorModel.self) private var model
 
     private enum Well: Hashable { case stroke, fill, thickness }
@@ -24,7 +27,6 @@ struct ToolbarView: View {
                     group: group,
                     tool: currentTool(in: group),
                     isSelected: isSelected(group),
-                    isDrawerOpen: optionsGroup == group,
                     onTap: { tap(group) }
                 )
                 .popover(
@@ -91,13 +93,9 @@ struct ToolbarView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.top, 12)
-        .padding(.bottom, 12)
-        .frame(width: 54)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
         .padding(.vertical, 10)
-        .padding(.leading, 8)
-        .padding(.trailing, 6)
+        .padding(.horizontal, 5)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
     }
 
     /// Selecting a tool also opens its drawer, so a slot is one click rather than two. Tapping
@@ -141,90 +139,5 @@ struct ToolbarView: View {
                 }
             }
         )
-    }
-}
-
-private struct ToolGroupButton: View {
-    let group: ToolGroup
-    let tool: ToolID
-    let isSelected: Bool
-    let isDrawerOpen: Bool
-    let onTap: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: onTap) {
-            icon
-                // A fixed square for the glyph, then the whole tile below it is the hit area.
-                .frame(width: 38, height: 38)
-                .frame(width: 44, height: 40)
-                .overlay(alignment: .bottomTrailing) {
-                    // Only the slots that actually have a drawer advertise one.
-                    if group.hasOptions {
-                        SubmenuChevron(color: isSelected ? Color.white : Theme.secondaryIcon)
-                            .frame(width: 7, height: 6)
-                            .padding(.trailing, 4)
-                            .padding(.bottom, 4)
-                    }
-                }
-                // Liquid Glass carries the tile's state: tinted while selected, plain on hover,
-                // and `identity` (no glass at all) the rest of the time.
-                .glassEffect(tileGlass, in: .rect(cornerRadius: 11))
-                // Without this the hit region followed the drawn glyph, so only the icon itself
-                // was clickable rather than the whole tile.
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(PressFeedbackStyle())
-        .focusable(false)
-        .onHover { isHovering = $0 }
-        .help(helpText)
-        .accessibilityLabel(group.displayName)
-    }
-
-    private var tileGlass: Glass {
-        if isSelected { return .regular.tint(Theme.accent).interactive() }
-        if isHovering { return .regular.interactive() }
-        return .identity
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        if group == .arrow {
-            // The app's own mark, rather than a generic line arrow.
-            StitchArrowShape()
-                .fill(isSelected ? Color.white : Theme.icon)
-                .frame(width: 21, height: 21)
-        } else {
-            Image(systemName: group.symbolName(for: tool))
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(isSelected ? Color.white : Theme.icon)
-        }
-    }
-
-    private var helpText: String {
-        group.hasOptions
-            ? "\(group.displayName) — click again to close its options"
-            : group.displayName
-    }
-}
-
-private struct SubmenuChevron: View {
-    var color: Color = Theme.icon
-
-    var body: some View {
-        Triangle()
-            .fill(color)
-    }
-}
-
-private struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.closeSubpath()
-        return path
     }
 }
