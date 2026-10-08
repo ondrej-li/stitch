@@ -85,6 +85,10 @@ struct EditorView: View {
             Button("Save", systemImage: "square.and.arrow.down", action: prepareExport)
                 .disabled(!model.canExport)
                 .help("Save as PNG")
+
+            #if os(macOS)
+            LaunchAtLoginButton()
+            #endif
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
