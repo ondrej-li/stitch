@@ -44,7 +44,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.graphics-design
-        NSHumanReadableCopyright: Copyright © 2026 Ondrej Li. All rights reserved.
+        NSHumanReadableCopyright: Copyright © 2026 Ondřej Linek <ondrej.linek@gmail.com>. All rights reserved.
         ITSAppUsesNonExemptEncryption: false
         NSHighResolutionCapable: true
         NSSupportsAutomaticTermination: false
