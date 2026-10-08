@@ -2,6 +2,8 @@
 
 DERIVED_DATA := .build/DerivedData
 APP := $(DERIVED_DATA)/Build/Products/Debug/Stitch.app
+RELEASE_APP := $(DERIVED_DATA)/Build/Products/Release/Stitch.app
+INSTALL_DIR := /Applications
 
 # xcodebuild and simctl need the full Xcode toolchain. When the Command Line Tools are
 # selected, point at Xcode.app instead so `make` works without sudo xcode-select.
@@ -9,7 +11,7 @@ ifeq ($(shell xcode-select -p 2>/dev/null),/Library/Developer/CommandLineTools)
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: all generate build test run clean
+.PHONY: all generate build test run install clean
 
 all: build
 
@@ -34,6 +36,19 @@ test:
 ## Build and launch the macOS app
 run: build
 	open $(APP)
+
+## Build the Release app and install it into /Applications
+install: generate
+	xcodebuild \
+		-project Stitch.xcodeproj \
+		-scheme Stitch \
+		-destination 'platform=macOS' \
+		-configuration Release \
+		-derivedDataPath $(DERIVED_DATA) \
+		build
+	rm -rf $(INSTALL_DIR)/Stitch.app
+	ditto $(RELEASE_APP) $(INSTALL_DIR)/Stitch.app
+	open $(INSTALL_DIR)/Stitch.app
 
 clean:
 	rm -rf Stitch.xcodeproj Stitch/Resources/Info.plist $(DERIVED_DATA)

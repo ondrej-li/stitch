@@ -1,5 +1,8 @@
 # Stitch
 
+[![CI](https://github.com/ondrej-li/stitch/actions/workflows/ci.yml/badge.svg)](https://github.com/ondrej-li/stitch/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/github/license/ondrej-li/stitch)](./LICENSE)
+
 A small, native, Skitch-like screenshot annotation app. One codebase, macOS and
 iOS/iPadOS.
 
@@ -35,6 +38,16 @@ make run
 `make run` generates the project, builds the macOS app, and launches it. If nothing is
 on the clipboard the app opens on an empty state offering **Paste** and **Open…**.
 Otherwise it loads the clipboard image immediately.
+
+To install Stitch as a regular app in `/Applications`, where Spotlight and the Dock can
+find it:
+
+```sh
+make install
+```
+
+That builds the Release configuration, replaces `/Applications/Stitch.app` and launches
+it. macOS asks before the first launch of a locally built app.
 
 The `Makefile` points `DEVELOPER_DIR` at `/Applications/Xcode.app` when the command
 line tools are the selected toolchain, so `make` works without `sudo xcode-select -s`.
@@ -101,6 +114,16 @@ to the canvas.
 Keyboard: `⌘V` paste · `⌘C` copy image · `⌘O` open · `⌘S` save PNG · `⌘Z` / `⇧⌘Z`
 undo/redo · `⌘+` / `⌘-` / `⌘0` / `⌘9` zoom.
 
+**Launch at login (macOS).** The power button at the left of the toolbar adds Stitch to
+your login items, so it can open by itself when you log in. It goes through
+`SMAppService.mainApp`, which registers the app bundle itself — no helper, no
+`LaunchAgent`, no extra entitlement, and it works inside the App Sandbox. The button
+reads its state from the system, so a change made in System Settings ▸ General ▸ Login
+Items is reflected the next time the window appears. macOS normally asks you to allow a
+new login item; the app offers to open that settings pane when approval is pending.
+Because the item is the app bundle, install to `/Applications` first: a registration made
+from a DerivedData build points at the build directory, which `make clean` deletes.
+
 Copy and Save write a PNG that honours the transparency mode under the crop menu: keep the
 alpha channel, or flatten onto white or black.
 
@@ -166,11 +189,17 @@ Stitch/                      SwiftUI app
 
 ## CI
 
-`CI` runs on every pull request and push to `main`:
+`CI` ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs on every pull
+request and push to `main`:
 
 - **StitchKit tests** — `swift test` (unit tests).
 - **Build app** — a clean `xcodegen generate`, then a Debug build for macOS *and* for
   the iOS Simulator.
+
+`main` is protected: changes land through a pull request, both checks above must pass,
+and the branch rejects force pushes and deletions. There is deliberately no required
+reviewer — the project has a single maintainer, and GitHub does not let you approve your
+own pull request.
 
 ## Distribution
 
@@ -214,7 +243,7 @@ stripped automatically in Release, which is what gets submitted.
 
 ## Licence
 
-[MIT](./LICENSE) © 2026 Ondrej Li.
+[MIT](./LICENSE) © 2026 Ondřej Linek.
 
 The project was originally GPLv3, which Apple's terms are incompatible with — the App
 Store's usage and DRM restrictions are exactly what the GPL forbids, so GPL-licensed apps
