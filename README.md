@@ -24,6 +24,10 @@ non-PNG output.
 | Xcode | 26 or later |
 | [XcodeGen](https://github.com/yonaskolb/XcodeGen) | `brew install xcodegen` |
 
+None of that is needed to change the code: CI generates the project and builds
+it for macOS and the iOS Simulator on a macOS runner, so the table is about
+running the app locally.
+
 `Stitch.xcodeproj` and `Stitch/Resources/Info.plist` are **generated** from
 [project.yml](project.yml) and are not committed. Regenerate them after changing the
 project layout or build settings.
