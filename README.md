@@ -232,15 +232,16 @@ system's "Allow Paste?" prompt, so iOS opens on a blank canvas and waits for an 
 Paste; only macOS auto-loads on launch. The `hasImages` check used to enable the Paste
 button is the prompt-free one.
 
-### To archive for submission
+### Archiving for submission
 
-Local builds use manual ad-hoc signing so they work with no developer team. Submission
-needs a real team:
+[`.github/workflows/testflight.yml`](./.github/workflows/testflight.yml) does it on a
+`macos-26` runner: archive, export and upload to TestFlight, for iOS and macOS. Push a
+`v*` tag, or run the workflow by hand. Six repository secrets are needed — see
+[docs/TESTFLIGHT.md](./docs/TESTFLIGHT.md).
 
-1. Set `CODE_SIGN_STYLE` to `Automatic` and add your `DEVELOPMENT_TEAM`
-   (either in [project.yml](./project.yml) or in Xcode's Signing & Capabilities editor).
-2. `xcodegen generate`, then **Product → Archive** and upload via Xcode Organizer or
-   `xcrun altool`.
+Local builds stay on manual ad-hoc signing so they work with no developer team; the
+workflow overrides that on the command line rather than in `project.yml`, because
+changing the project would break those local builds.
 
 Note that `get-task-allow` appears in Debug entitlements so the debugger can attach; it is
 stripped automatically in Release, which is what gets submitted.
