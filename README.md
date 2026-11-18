@@ -234,14 +234,11 @@ button is the prompt-free one.
 
 ### Archiving for submission
 
-[`.github/workflows/testflight.yml`](./.github/workflows/testflight.yml) does it on a
-`macos-26` runner: archive, export and upload to TestFlight, for iOS and macOS. Push a
-`v*` tag, or run the workflow by hand. Six repository secrets are needed — see
-[docs/TESTFLIGHT.md](./docs/TESTFLIGHT.md).
-
-Local builds stay on manual ad-hoc signing so they work with no developer team; the
-workflow overrides that on the command line rather than in `project.yml`, because
-changing the project would break those local builds.
+Publishing is manual, from Xcode, and CI does not do it. `project.yml` keeps manual
+ad-hoc signing so `make build` works with no team; submission needs a real team set
+on the *Stitch* target, then **Product → Archive** and upload from the Organizer.
+[docs/TESTFLIGHT.md](./docs/TESTFLIGHT.md) has the steps; no Apple credential is
+stored in this repository.
 
 Note that `get-task-allow` appears in Debug entitlements so the debugger can attach; it is
 stripped automatically in Release, which is what gets submitted.
