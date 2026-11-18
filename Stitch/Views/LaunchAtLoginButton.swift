@@ -18,11 +18,11 @@ struct LaunchAtLoginButton: View {
             } message: {
                 Text(login.failure ?? "")
             }
-            .alert("Allow Stitch in Login Items", isPresented: $isShowingApproval) {
+            .alert("Allow \(AppInfo.name) in Login Items", isPresented: $isShowingApproval) {
                 Button("Open Login Items") { login.openLoginItemsSettings() }
                 Button("Later", role: .cancel) {}
             } message: {
-                Text("macOS is waiting for you to allow Stitch to open automatically at login.")
+                Text("macOS is waiting for you to allow \(AppInfo.name) to open automatically at login.")
             }
     }
 
@@ -35,11 +35,11 @@ struct LaunchAtLoginButton: View {
 
     private var help: String {
         if login.needsApproval {
-            return "Waiting for you to allow Stitch in System Settings ▸ General ▸ Login Items"
+            return "Waiting for you to allow \(AppInfo.name) in System Settings ▸ General ▸ Login Items"
         }
         return login.isOn
-            ? "Stitch opens automatically when you log in — click to turn off"
-            : "Open Stitch automatically when you log in"
+            ? "\(AppInfo.name) opens automatically when you log in — click to turn off"
+            : "Open \(AppInfo.name) automatically when you log in"
     }
 }
 #endif

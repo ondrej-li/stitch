@@ -21,7 +21,7 @@ struct EditorView: View {
     var body: some View {
         NavigationStack {
             WorkspaceView()
-                .navigationTitle("Stitch")
+                .navigationTitle(AppInfo.name)
                 .toolbar { commandItems }
                 .toolbar { toolItems }
                 .overlay(alignment: .leading) { paletteOverlay }
@@ -37,7 +37,7 @@ struct EditorView: View {
             isPresented: $isExporting,
             document: exportDocument,
             contentType: .png,
-            defaultFilename: "Stitch",
+            defaultFilename: AppInfo.name,
             onCompletion: handleExport
         )
         .dropDestination(for: URL.self) { urls, _ in
@@ -45,7 +45,7 @@ struct EditorView: View {
             model.load(image: image)
             return true
         }
-        .alert("Stitch", isPresented: isShowingError) {
+        .alert(AppInfo.name, isPresented: isShowingError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
@@ -90,6 +90,11 @@ struct EditorView: View {
             LaunchAtLoginButton()
             #endif
         }
+
+        // Liquid Glass renders each run of items as its own capsule. A fixed spacer splits
+        // "get the image in and out" from "change the image", so the two read as two groups
+        // instead of one long strip.
+        ToolbarSpacer(.fixed, placement: .navigation)
 
         ToolbarItemGroup(placement: .primaryAction) {
             Button("Undo", systemImage: "arrow.uturn.backward") { model.undo() }

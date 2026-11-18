@@ -8,12 +8,16 @@ struct RendererTests {
     private func style(
         stroke: RGBAColor = .red,
         fill: RGBAColor? = nil,
-        lineWidth: Double = 4
+        lineWidth: Double = 4,
+        isShaded: Bool = true,
+        hasBackdrop: Bool = true
     ) -> AnnotationStyle {
         var style = AnnotationStyle()
         style.stroke = stroke
         style.fill = fill
         style.lineWidth = lineWidth
+        style.isShaded = isShaded
+        style.hasBackdrop = hasBackdrop
         return style
     }
 
@@ -117,8 +121,12 @@ struct RendererTests {
     @Test("An oval leaves the corners of its bounding box clear")
     func ellipseGeometry() throws {
         let canvas = CanvasBitmap(width: 60, height: 60)
+        // The backdrop is material, not geometry, and is tested on its own below.
         Renderer.draw(
-            .ellipse(CGRect(x: 10, y: 10, width: 40, height: 40), style: style(fill: .red, lineWidth: 2)),
+            .ellipse(
+                CGRect(x: 10, y: 10, width: 40, height: 40),
+                style: style(fill: .red, lineWidth: 2, hasBackdrop: false)
+            ),
             in: canvas.context
         )
         let image = try #require(canvas.makeImage())
@@ -300,5 +308,122 @@ struct RendererTests {
         let square = CanvasBitmap(width: 100, height: 100)
         Renderer.draw(.rectangle(rect, style: style(lineWidth: 4)), in: square.context)
         #expect(isColour(try #require(square.makeImage()), 11, 11, .stitchRed, tolerance: 12))
+    }
+
+    // MARK: - Shape material
+
+    @Test("A filled shape is shaded lighter at the top than at the bottom")
+    func fillIsShaded() throws {
+        let canvas = CanvasBitmap(width: 80, height: 80)
+        Renderer.draw(
+            .rectangle(CGRect(x: 10, y: 10, width: 60, height: 60), style: style(fill: .blue, hasBackdrop: false)),
+            in: canvas.context
+        )
+        let image = try #require(canvas.makeImage())
+
+        let top = luminance(pixel(image, 40, 14))
+        let middle = luminance(pixel(image, 40, 40))
+        let bottom = luminance(pixel(image, 40, 66))
+
+        #expect(top > middle)
+        #expect(middle > bottom)
+        // The chosen colour sits at the midpoint, so the middle is the colour the user picked.
+        #expect(isColour(image, 40, 40, .stitchBlue))
+    }
+
+    @Test("Turning the shade off fills a shape flat")
+    func fillWithoutShadeIsFlat() throws {
+        let canvas = CanvasBitmap(width: 80, height: 80)
+        Renderer.draw(
+            .rectangle(
+                CGRect(x: 10, y: 10, width: 60, height: 60),
+                style: style(fill: .blue, isShaded: false, hasBackdrop: false)
+            ),
+            in: canvas.context
+        )
+        let image = try #require(canvas.makeImage())
+        #expect(luminance(pixel(image, 40, 22)) == luminance(pixel(image, 40, 58)))
+    }
+
+    @Test("A backdrop shadows the pixels just outside a filled shape")
+    func backdropShadowsOutside() throws {
+        let canvas = CanvasBitmap(width: 120, height: 120)
+        canvas.fill(CGRect(x: 0, y: 0, width: 120, height: 120), with: .white)
+        Renderer.draw(
+            .rectangle(
+                CGRect(x: 30, y: 30, width: 60, height: 60),
+                style: style(fill: .white, lineWidth: 8, isShaded: false)
+            ),
+            in: canvas.context
+        )
+        let image = try #require(canvas.makeImage())
+
+        // Below the shape the shadow is thrown, so the white backdrop is darkened.
+        let below = pixel(image, 60, 92)
+        #expect(below.isOpaque)
+        #expect(luminance(below) < 250)
+        // Well away from the shape nothing is touched.
+        #expect(isColour(image, 4, 4, .white))
+    }
+
+    @Test("Turning the backdrop off leaves no halo around a shape")
+    func noBackdropLeavesNoHalo() throws {
+        let canvas = CanvasBitmap(width: 120, height: 120)
+        canvas.fill(CGRect(x: 0, y: 0, width: 120, height: 120), with: .white)
+        Renderer.draw(
+            .rectangle(
+                CGRect(x: 30, y: 30, width: 60, height: 60),
+                style: style(fill: .blue, hasBackdrop: false)
+            ),
+            in: canvas.context
+        )
+        #expect(isColour(try #require(canvas.makeImage()), 60, 96, .white))
+    }
+
+    @Test("An outline-only shape casts no backdrop, so its corners stay untouched")
+    func outlineOnlyShapeHasNoBackdrop() throws {
+        let canvas = CanvasBitmap(width: 120, height: 120)
+        Renderer.draw(
+            .roundedRectangle(
+                CGRect(x: 30, y: 30, width: 60, height: 60),
+                cornerRadius: 12,
+                style: style(lineWidth: 6)
+            ),
+            in: canvas.context
+        )
+        #expect(isColour(try #require(canvas.makeImage()), 100, 100, .transparent, tolerance: 0))
+    }
+
+    @Test("A shape's reported bounds cover the backdrop it paints")
+    func boundsCoverTheBackdrop() {
+        let frame = CGRect(x: 30, y: 30, width: 60, height: 60)
+        let withBackdrop = Renderer.bounds(of: .rectangle(frame, style: style(fill: .red, lineWidth: 8)))
+        let flat = Renderer.bounds(
+            of: .rectangle(frame, style: style(fill: .red, lineWidth: 8, hasBackdrop: false))
+        )
+
+        #expect(withBackdrop.height > flat.height)
+        #expect(withBackdrop.width > flat.width)
+        // The outset has to clear the shadow, so it is never smaller than half the stroke.
+        #expect(withBackdrop.minY <= flat.minY - 4)
+    }
+
+    @Test("A shape's edge is antialiased rather than a hard step")
+    func shapeEdgeIsAntialiased() throws {
+        let canvas = CanvasBitmap(width: 80, height: 80)
+        Renderer.draw(
+            .ellipse(
+                CGRect(x: 10, y: 10, width: 60, height: 60),
+                style: style(fill: .red, isShaded: false, hasBackdrop: false)
+            ),
+            in: canvas.context
+        )
+        let image = try #require(canvas.makeImage())
+
+        // Walk a horizontal line through the middle of the oval and find the first painted
+        // pixel. A hard edge jumps from 0 to 255; an antialiased one has partial alpha there.
+        let row = (10..<70).map { pixel(image, $0, 40) }
+        let edge = row.first { $0.alpha > 0 && $0.alpha < 255 }
+        #expect(edge != nil, "the oval's edge steps straight from clear to solid")
     }
 }

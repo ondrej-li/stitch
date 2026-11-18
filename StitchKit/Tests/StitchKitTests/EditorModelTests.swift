@@ -20,6 +20,10 @@ struct EditorModelTests {
         model.activeTool = .rectangle
         model.style.stroke = .red
         model.style.fill = .red
+        // These downstream assertions read exact pixel colours, so the material is switched off
+        // and the tests see the shape's geometry alone. Shading and backdrop have their own tests.
+        model.style.isShaded = false
+        model.style.hasBackdrop = false
         model.beginStroke(at: start)
         model.updateStroke(to: end)
         model.endStroke()

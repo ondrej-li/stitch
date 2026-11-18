@@ -46,6 +46,7 @@ jobs:
             -destination 'platform=macOS' \
             -configuration Debug \
             -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Build for iOS Simulator
@@ -56,4 +57,5 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
             build

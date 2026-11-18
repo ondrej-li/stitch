@@ -3,17 +3,13 @@ import SwiftUI
 
 /// Dark chrome, matching the reference screenshot's tool strip.
 enum Theme {
-    static let toolbarBackground = Color(white: 0.15)
     static let canvasBackdrop = Color(white: 0.09)
     static let raisedBackground = Color(white: 0.22)
     static let selectedControl = Color(white: 0.40)
     static let hairline = Color(white: 0.30)
     static let icon = Color(white: 0.93)
     static let secondaryIcon = Color(white: 0.62)
-    static let disabledIcon = Color(white: 0.42)
-    static let hover = Color(white: 0.28)
     static let accent = Color(red: 0.16, green: 0.49, blue: 0.96)
-    static let canvasCornerRadius: CGFloat = 2
 }
 
 extension Color {

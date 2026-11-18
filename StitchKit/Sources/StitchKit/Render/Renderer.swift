@@ -50,8 +50,9 @@ public enum Renderer {
             )
             let outline = ArrowGeometry.outline(from: from, to: to, metrics: metrics)
             guard !outline.isEmpty else { return .null }
-            // One pixel of slack for the antialiased edge.
-            return Geometry.boundingBox(of: outline).insetBy(dx: -1, dy: -1)
+            // One pixel of slack for the antialiased edge, plus the room the backdrop needs.
+            let slack = 1 + ShapePainter.backdropOutset(for: style)
+            return Geometry.boundingBox(of: outline).insetBy(dx: -slack, dy: -slack)
 
         case let .line(from, to, style):
             let margin = CGFloat(style.lineWidth)
@@ -61,7 +62,9 @@ public enum Renderer {
             return Geometry.rect(from: from, to: to).insetBy(dx: -margin, dy: -margin)
 
         case let .rectangle(rect, style), let .roundedRectangle(rect, _, style), let .ellipse(rect, style):
-            return rect.insetBy(dx: -style.lineWidth, dy: -style.lineWidth)
+            // Only a filled shape casts a backdrop, matching what `ShapePainter` draws.
+            let margin = CGFloat(style.lineWidth) + (style.fill == nil ? 0 : ShapePainter.backdropOutset(for: style))
+            return rect.insetBy(dx: -margin, dy: -margin)
 
         case let .freehand(kind, points, style):
             guard !points.isEmpty else { return .null }
@@ -95,17 +98,22 @@ public enum Renderer {
         )
         guard let path = ArrowGeometry.path(from: from, to: to, metrics: metrics) else { return }
 
-        context.saveGState()
-        context.setFillColor(style.stroke.cgColor)
-        context.addPath(path)
-        // Filled, not stroked: the arrow is one solid silhouette.
-        context.fillPath()
-        context.restoreGState()
+        // Filled, not stroked: the arrow is one solid silhouette. The foreground colour is the
+        // material, so the shade and the backdrop treat it like any other filled shape.
+        ShapePainter.paint(
+            silhouette: path,
+            fill: style.stroke,
+            outline: nil,
+            outlineColor: style.stroke,
+            style: style,
+            in: context
+        )
     }
 
     private static func drawLine(from: CGPoint, to: CGPoint, style: AnnotationStyle, in context: CGContext) {
         guard from != to else { return }
         context.saveGState()
+        context.setShouldAntialias(true)
         let path = CGMutablePath()
         path.move(to: from)
         path.addLine(to: to)
@@ -113,6 +121,7 @@ public enum Renderer {
         context.setStrokeColor(style.stroke.cgColor)
         context.setLineWidth(CGFloat(style.lineWidth))
         context.setLineCap(.round)
+        context.setLineJoin(.round)
         context.strokePath()
         context.restoreGState()
     }
@@ -133,26 +142,24 @@ public enum Renderer {
         in context: CGContext
     ) {
         guard !rect.isNull, rect.width > 0, rect.height > 0 else { return }
-        context.saveGState()
 
-        if let fill = style.fill {
-            context.addPath(path(for: rect, cornerRadius: cornerRadius))
-            context.setFillColor(fill.cgColor)
-            context.fillPath()
-        }
-
+        let silhouette = path(for: rect, cornerRadius: cornerRadius)
         let stroke = strokedRect(rect, style: style)
-        if stroke.width > 0, stroke.height > 0 {
+        let outline: CGPath? = if stroke.width > 0, stroke.height > 0 {
             // Shrink the radius with the stroke rect so the two outlines stay concentric.
-            let radius = max(cornerRadius - CGFloat(style.lineWidth) / 2, 0)
-            context.addPath(path(for: stroke, cornerRadius: radius))
-            context.setStrokeColor(style.stroke.cgColor)
-            context.setLineWidth(CGFloat(style.lineWidth))
-            context.setLineJoin(.round)
-            context.strokePath()
+            path(for: stroke, cornerRadius: max(cornerRadius - CGFloat(style.lineWidth) / 2, 0))
+        } else {
+            nil
         }
 
-        context.restoreGState()
+        ShapePainter.paint(
+            silhouette: silhouette,
+            fill: style.fill,
+            outline: outline,
+            outlineColor: style.stroke,
+            style: style,
+            in: context
+        )
     }
 
     private static func path(for rect: CGRect, cornerRadius: CGFloat) -> CGPath {
@@ -165,21 +172,22 @@ public enum Renderer {
 
     private static func drawEllipse(_ rect: CGRect, style: AnnotationStyle, in context: CGContext) {
         guard !rect.isNull, rect.width > 0, rect.height > 0 else { return }
-        context.saveGState()
-
-        if let fill = style.fill {
-            context.setFillColor(fill.cgColor)
-            context.fillEllipse(in: rect)
-        }
 
         let stroke = strokedRect(rect, style: style)
-        if stroke.width > 0, stroke.height > 0 {
-            context.setStrokeColor(style.stroke.cgColor)
-            context.setLineWidth(CGFloat(style.lineWidth))
-            context.strokeEllipse(in: stroke)
+        let outline: CGPath? = if stroke.width > 0, stroke.height > 0 {
+            CGPath(ellipseIn: stroke, transform: nil)
+        } else {
+            nil
         }
 
-        context.restoreGState()
+        ShapePainter.paint(
+            silhouette: CGPath(ellipseIn: rect, transform: nil),
+            fill: style.fill,
+            outline: outline,
+            outlineColor: style.stroke,
+            style: style,
+            in: context
+        )
     }
 
     // MARK: - Freehand
@@ -193,6 +201,8 @@ public enum Renderer {
         guard !points.isEmpty else { return }
         let width = strokeWidth(kind: kind, style: style)
         context.saveGState()
+        context.setShouldAntialias(true)
+        context.setAllowsAntialiasing(true)
 
         switch kind {
         case .pen:

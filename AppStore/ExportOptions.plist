@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Exports a signed .pkg/.ipa for App Store Connect without uploading it. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>teamID</key>
+	<string>B592D69P29</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<!-- Keep the build number from project.yml; Xcode must not rewrite it per export. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+</dict>
+</plist>

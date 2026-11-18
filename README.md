@@ -1,4 +1,9 @@
-# Stitch
+# stitsch
+
+Published as **stitsch** — the German spelling registered in App Store Connect, and the
+bundle name, display name, window title and save-panel filename. The Xcode target, the
+`StitchKit` module and this repository keep the original spelling, **Stitch**, so the code
+and the file names stay English.
 
 [![CI](https://github.com/ondrej-li/stitch/actions/workflows/ci.yml/badge.svg)](https://github.com/ondrej-li/stitch/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/github/license/ondrej-li/stitch)](./LICENSE)
@@ -21,8 +26,12 @@ non-PNG output.
 |---|---|
 | macOS | 26.0 or later |
 | iOS / iPadOS | 26.0 or later |
-| Xcode | 26 or later |
+| Xcode | 26 or later (Swift 6.2 toolchain) |
 | [XcodeGen](https://github.com/yonaskolb/XcodeGen) | `brew install xcodegen` |
+
+The deployment targets are deliberately macOS 26 / iOS 26: the whole chrome is Liquid
+Glass, and the app uses `glassEffect`, `GlassEffectContainer`, `ToolbarSpacer` and the
+glass button styles unconditionally rather than behind availability checks.
 
 `Stitch.xcodeproj` and `Stitch/Resources/Info.plist` are **generated** from
 [project.yml](project.yml) and are not committed. Regenerate them after changing the
@@ -46,11 +55,12 @@ find it:
 make install
 ```
 
-That builds the Release configuration, replaces `/Applications/Stitch.app` and launches
+That builds the Release configuration, replaces `/Applications/stitsch.app` and launches
 it. macOS asks before the first launch of a locally built app.
 
 The `Makefile` points `DEVELOPER_DIR` at `/Applications/Xcode.app` when the command
 line tools are the selected toolchain, so `make` works without `sudo xcode-select -s`.
+On a machine without the distribution certificate, `make build SIGNING=0` builds unsigned.
 To build in Xcode instead:
 
 ```sh
@@ -65,14 +75,22 @@ Then pick the **Stitch** scheme and either the *My Mac* or an iOS Simulator dest
 make test          # StitchKit unit tests (Swift Testing)
 ```
 
-171 tests cover the annotation geometry, the dirty-rect undo/redo patches, crop, rotate
-and straighten maths, blend modes, PNG export and the clipboard-to-PNG pipeline.
+198 tests cover the annotation geometry, the shape material, the dirty-rect undo/redo
+patches, crop, rotate and straighten maths, blend modes, PNG export and the
+clipboard-to-PNG pipeline.
 
 ### Signing
 
-The project uses manual ad-hoc signing (`CODE_SIGN_IDENTITY = "-"`) so local builds
-work with no developer team. To run on a physical iOS device, set your team and switch
-to automatic signing for the `Stitch` target.
+The project signs automatically against team `B592D69P29`
+(`com.defik74.stitch`). A build with no developer team, such as CI, passes
+`CODE_SIGNING_ALLOWED=NO`:
+
+```sh
+make build SIGNING=0
+```
+
+Release archives use `Apple Distribution`, Debug builds use `Apple Development`, both
+managed by Xcode's automatic signing.
 
 ## The app
 
@@ -85,7 +103,7 @@ glass there has the image behind it to refract.
 |---|---|
 | Arrow | none — it scales itself to the drag |
 | Text | font, size, bold/italic/underline, colour, alignment, text background |
-| Shapes | **rectangle · rounded rectangle · oval · line**, corner radius, fill |
+| Shapes | **rectangle · rounded rectangle · oval · line**, corner radius, fill, **shade**, **backdrop** |
 | Marker | marker / highlighter / eraser |
 | Stamps | the ✕ ! ? ✓ ♥ badges, quick emoji, the system emoji picker |
 | Crop | rotate 90° left/right, flip H/V, **straighten**, aspect presets, transparency, Apply/Cancel |
@@ -93,6 +111,13 @@ glass there has the image behind it to refract.
 
 Thickness has a single home — its own well — and applies to every line-based tool, so the
 drawers never repeat it.
+
+**Shapes are drawn, not stamped.** Every outline is antialiased, and a filled shape gets a
+vertical **shade** (a lifted highlight at the top, the chosen colour through the middle, a
+darker edge at the bottom) plus a soft **backdrop** shadow that scales with the stroke. Both
+are switches in the Shapes drawer, so a flat, shadowless rectangle is still one click away;
+an outline-only shape never casts one. Arrows get the same treatment, because an arrow is a
+filled silhouette.
 
 **The arrow matches Skitch**: one solid silhouette — a tapered shaft running into a barbed
 head — whose head, shaft and point all scale with the drag. There is no dialog for it,
@@ -174,16 +199,17 @@ StitchKit/                   platform-agnostic core (Swift Package)
   Sources/StitchKit/
     Model/                   annotations, styles, tools, crop transform, stamps
     Canvas/                  CanvasBitmap — the mutable pixel surface
-    Render/                  Renderer, CoreText text and stamp rasterisers
+    Render/                  Renderer, shape material, CoreText text and stamp rasterisers
     History/                 dirty-rect patches and the undo/redo stacks
     Tools/                   drag-to-annotation sessions, crop session
     Editing/                 ImageDocument (pixels + history), EditorModel (app state)
     Export/                  rotate/flip/crop ops, alpha modes, PNG encode/decode
-  Tests/StitchKitTests/      171 tests
+  Tests/StitchKitTests/      198 tests
 Stitch/                      SwiftUI app
   Views/                     toolbar, canvas, crop overlay, format bars, action bar
   Platform/                  NSPasteboard/UIPasteboard adapters, PNG file document
   Commands/                  macOS menu bar
+AppStore/                    export and upload options for App Store Connect
 .github/workflows/ci.yml     runs the tests and both builds on macos-26
 ```
 
@@ -194,7 +220,8 @@ request and push to `main`:
 
 - **StitchKit tests** — `swift test` (unit tests).
 - **Build app** — a clean `xcodegen generate`, then a Debug build for macOS *and* for
-  the iOS Simulator.
+  the iOS Simulator. CI has no certificates, so both builds pass
+  `CODE_SIGNING_ALLOWED=NO`.
 
 `main` is protected: changes land through a pull request, both checks above must pass,
 and the branch rejects force pushes and deletions. There is deliberately no required
@@ -207,12 +234,15 @@ The app is built to be App Store-ready. The pieces are in place:
 
 | Requirement | Where |
 |---|---|
-| **App Sandbox** (mandatory for the Mac App Store) | [Stitch.entitlements](./Stitch/Resources/Stitch.entitlements) |
+| Bundle identifier | `com.defik74.stitch`, team `B592D69P29` |
+| **App Sandbox** (mandatory for the Mac App Store) | [Stitch.entitlements](./Stitch/Resources/Stitch.entitlements), scoped to macOS only |
 | File access for the open/save panels and drag-and-drop | `com.apple.security.files.user-selected.read-write` |
 | **Privacy manifest** | [PrivacyInfo.xcprivacy](./Stitch/Resources/PrivacyInfo.xcprivacy) |
+| iPad orientations (all four, so multitasking is supported) | `UISupportedInterfaceOrientations~ipad` |
 | Icon without an alpha channel (iOS requirement) | `AppIcon.appiconset/icon_ios_1024.png` |
 | Encryption declaration | `ITSAppUsesNonExemptEncryption: false` |
 | Hardened runtime | `ENABLE_HARDENED_RUNTIME` |
+| MIT notice in the shipped bundle | `LICENSE` copied into the app's resources |
 
 **Deliberately absent entitlements.** Stitch requests no network access, no screen
 recording, no camera, no microphone, no contacts, no calendars and no location. It needs
@@ -228,15 +258,33 @@ system's "Allow Paste?" prompt, so iOS opens on a blank canvas and waits for an 
 Paste; only macOS auto-loads on launch. The `hasImages` check used to enable the Paste
 button is the prompt-free one.
 
-### To archive for submission
+### Building and publishing
 
-Local builds use manual ad-hoc signing so they work with no developer team. Submission
-needs a real team:
+Signing is automatic, against the owner's team. The `Makefile` wraps the whole path:
 
-1. Set `CODE_SIGN_STYLE` to `Automatic` and add your `DEVELOPMENT_TEAM`
-   (either in [project.yml](./project.yml) or in Xcode's Signing & Capabilities editor).
-2. `xcodegen generate`, then **Product → Archive** and upload via Xcode Organizer or
-   `xcrun altool`.
+```sh
+make archive-macos      # Release archive for the Mac App Store
+make archive-ios        # Release archive for iOS / iPadOS
+make export-macos       # signed .pkg in .build/export/macOS
+make export-ios         # signed .ipa in .build/export/iOS
+make upload-macos       # archive, then send it to App Store Connect
+make upload-ios
+make publish            # both platforms
+```
+
+The upload targets use `xcodebuild -exportArchive -destination upload`, which signs with
+`Apple Distribution` and hands the build to App Store Connect using the Apple ID signed in
+under Xcode ▸ Settings ▸ Accounts. [AppStore/UploadOptions.plist](./AppStore/UploadOptions.plist)
+and [AppStore/ExportOptions.plist](./AppStore/ExportOptions.plist) hold the method, the team
+and the build-number policy.
+
+An App Store Connect record for `com.defik74.stitch` must exist before a build can be
+attached to a version; that record, the screenshots, the description and the privacy policy
+URL are entered in App Store Connect. Once a build is processed, add it to the version and
+submit it for review.
+
+Version and build number live in [project.yml](./project.yml) (`MARKETING_VERSION` and
+`CURRENT_PROJECT_VERSION`). Bump the build number for every upload.
 
 Note that `get-task-allow` appears in Debug entitlements so the debugger can attach; it is
 stripped automatically in Release, which is what gets submitted.
@@ -245,8 +293,12 @@ stripped automatically in Release, which is what gets submitted.
 
 [MIT](./LICENSE) © 2026 Ondřej Linek.
 
+MIT is App Store compatible, so nothing in the licence blocks distribution: it grants the
+right to sublicense and distribute, which is exactly what the App Store agreement needs,
+and it imposes no copyleft or DRM restriction. The copyright notice is copied into the app
+bundle as a resource so every distributed copy carries it, as the licence requires.
+
 The project was originally GPLv3, which Apple's terms are incompatible with — the App
 Store's usage and DRM restrictions are exactly what the GPL forbids, so GPL-licensed apps
-cannot be submitted. It was relicensed to MIT, which is App Store compatible, so the
-licensing no longer blocks distribution.
+cannot be submitted. It was relicensed to MIT for that reason.
 

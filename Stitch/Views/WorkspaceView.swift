@@ -221,13 +221,14 @@ struct TextSessionOverlay: View {
 
                 HStack(spacing: 8) {
                     Button("Cancel", role: .cancel) { model.cancelText() }
+                        .buttonStyle(.glass)
                     Button("Add", action: commit)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 }
                 .controlSize(.small)
             }
             .padding(8)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .glassEffect(.regular, in: .rect(cornerRadius: 10))
             .offset(x: origin.x, y: origin.y)
             .onAppear {
                 draft = session.string

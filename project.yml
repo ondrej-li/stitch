@@ -1,7 +1,7 @@
 name: Stitch
 
 options:
-  bundleIdPrefix: com.ondrejli
+  bundleIdPrefix: com.defik74
   createIntermediateGroups: true
   deploymentTarget:
     iOS: "26.0"
@@ -12,11 +12,12 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
-    # Manual ad-hoc signing keeps local builds working with no developer team. For App Store
-    # distribution set your team and switch to automatic signing, then archive.
-    CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: "-"
+    CURRENT_PROJECT_VERSION: "2"
+    # Automatic signing against the owner's team. App Store distribution needs real
+    # certificates, and letting Xcode manage them also creates the App ID and profiles on the
+    # first signed build. A build without this team can pass CODE_SIGNING_ALLOWED=NO.
+    DEVELOPMENT_TEAM: B592D69P29
+    CODE_SIGN_STYLE: Automatic
     # Required for App Store submission, and for notarisation outside it.
     ENABLE_HARDENED_RUNTIME: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -29,18 +30,26 @@ packages:
 targets:
   Stitch:
     type: application
+    # XcodeGen's iOS application preset stamps CODE_SIGN_IDENTITY = "iPhone Developer", which
+    # conflicts with automatic signing. Xcode's own defaults for an app target plus the
+    # explicit settings below are all this project needs.
+    settingPresets: none
     # One target, two destinations: the same SwiftUI source ships on macOS and iOS/iPadOS.
     supportedDestinations: [iOS, macOS]
     sources:
       - path: Stitch
+      # The MIT notice travels with the binary, as the licence requires of distributions.
+      - path: LICENSE
+        buildPhase: resources
     dependencies:
       - package: StitchKit
         product: StitchKit
     info:
       path: Stitch/Resources/Info.plist
       properties:
-        CFBundleName: Stitch
-        CFBundleDisplayName: Stitch
+        # The published name is the German spelling registered in App Store Connect.
+        CFBundleName: stitsch
+        CFBundleDisplayName: stitsch
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.graphics-design
@@ -52,20 +61,27 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # iPhone keeps portrait plus both landscape directions. iPad must support all four,
+        # because it can be resized into any orientation unless the app opts out of
+        # multitasking, and App Review rejects an incomplete set.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_NAME: Stitch
-        PRODUCT_BUNDLE_IDENTIFIER: com.ondrejli.stitch
+        PRODUCT_NAME: stitsch
+        PRODUCT_BUNDLE_IDENTIFIER: com.defik74.stitch
         TARGETED_DEVICE_FAMILY: "1,2"
-        # Overrides the "iPhone Developer" identity XcodeGen applies to iOS-destined
-        # targets, which needs a team. Set your team here for device builds.
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_ENTITLEMENTS: Stitch/Resources/Stitch.entitlements
+        # The sandbox is a Mac App Store requirement and has no meaning on iOS, which is always
+        # sandboxed. Scoping the file to macOS keeps the iOS signature free of a Mac-only
+        # entitlement that App Store validation would complain about.
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Stitch/Resources/Stitch.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES

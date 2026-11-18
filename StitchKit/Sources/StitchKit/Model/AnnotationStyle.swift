@@ -14,6 +14,13 @@ public struct AnnotationStyle: Hashable, Codable, Sendable {
     /// which is what the slashed swatch in the reference toolbar represents.
     public var fill: RGBAColor?
 
+    /// Gives a filled shape a vertical light-to-dark shade, so it reads as a solid mark rather
+    /// than a flat wash of colour. Has no effect without a fill.
+    public var isShaded: Bool = true
+    /// Drops a soft shadow behind a shape, so it stands off a busy screenshot instead of
+    /// dissolving into it.
+    public var hasBackdrop: Bool = true
+
     /// Stroke thickness for every line-based tool: arrows, lines, shape outlines, the marker
     /// and the eraser.
     public var lineWidth: Double = 15

@@ -34,7 +34,7 @@ struct ToolOptionsView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                fillToggle
+                shapeMaterial
 
             case .draw:
                 // Nothing beyond the sub-tool picker: thickness has a dedicated well in the
@@ -100,14 +100,38 @@ struct ToolOptionsView: View {
         )
     }
 
-    private var fillToggle: some View {
-        Toggle(
-            "Fill shape",
-            isOn: Binding(
-                get: { model.style.fill != nil },
-                set: { model.style.fill = $0 ? model.style.stroke : nil }
+    /// Fill, and the two switches that make a fill read as a solid object: a shade across it and
+    /// a backdrop behind it. The shade and the backdrop are drawn by the renderer, so what the
+    /// toggles show is exactly what the PNG will contain.
+    private var shapeMaterial: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(
+                "Fill shape",
+                isOn: Binding(
+                    get: { model.style.fill != nil },
+                    set: { model.style.fill = $0 ? model.style.stroke : nil }
+                )
             )
-        )
+
+            Toggle(
+                "Shade fill",
+                isOn: Binding(
+                    get: { model.style.isShaded },
+                    set: { model.style.isShaded = $0 }
+                )
+            )
+            .disabled(model.style.fill == nil)
+            .help("A light-to-dark gradient across the fill")
+
+            Toggle(
+                "Backdrop",
+                isOn: Binding(
+                    get: { model.style.hasBackdrop },
+                    set: { model.style.hasBackdrop = $0 }
+                )
+            )
+            .help("A soft shadow, so the shape stands off the screenshot")
+        }
         .toggleStyle(.switch)
         .controlSize(.small)
     }
