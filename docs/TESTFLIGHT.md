@@ -16,7 +16,7 @@ Apple ID signed in.
 same build number twice. `MARKETING_VERSION` is in `project.yml`; bump it there for
 a new version.
 
-## The six repository secrets
+## The four repository secrets
 
 | Secret | Contents |
 | --- | --- |
@@ -24,22 +24,17 @@ a new version.
 | `APP_CONNECT_KEY_ID` | the API key's 10-character ID |
 | `APP_CONNECT_ISSUER_ID` | the issuer UUID shown above the key list |
 | `APP_CONNECT_KEY_P8` | the whole `AuthKey_<id>.p8`, base64 encoded |
-| `BUILD_CERTIFICATE_P12` | your *Apple Distribution* certificate, base64 encoded |
-| `BUILD_CERTIFICATE_PASSWORD` | the password you chose when exporting the `.p12` |
 
-The key comes from *App Store Connect → Users and Access → Integrations → App Store
-Connect API*, role **App Manager**. Apple allows one download of the `.p8`.
-
-The certificate comes from Keychain Access: *My Certificates → Apple Distribution: …
-→ right-click → Export*. The runner imports it into a temporary keychain which is
-thrown away with the machine.
+No certificate is stored anywhere. The runner signs with the API key alone
+(`-allowProvisioningUpdates` plus `-authenticationKeyPath`), which is also why no
+developer machine has to exist: the certificate and the provisioning profile are
+resolved on the runner, per job.
 
 ```sh
 base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy     # paste into the secret
-base64 -i distribution.p12      | pbcopy
 ```
 
-Until all six exist the workflow fails at *Check the signing secrets exist* and
+Until all four exist the workflow fails at *Check the signing secrets exist* and
 names the missing ones, on purpose: a deploy that cannot deploy should be red.
 
 ## Signing, and why the workflow overrides `project.yml`
