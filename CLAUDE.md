@@ -28,7 +28,7 @@ StitchKit/                     platform-agnostic core (Swift Package, no AppKit/
   Tests/StitchKitTests/        171 tests
 Stitch/                        SwiftUI app: Views/, Platform/ (pasteboard, file document), Commands/
 AppStore/ExportOptions.plist   export settings used by the deploy workflow
-.github/workflows/             ci.yml (tests + both builds), testflight.yml (archive + upload)
+.github/workflows/             ci.yml (tests + both builds); nothing publishes from CI
 ```
 
 ## Building and testing
@@ -61,14 +61,11 @@ targets need a full Xcode. Nothing here builds on Linux or on the VPS.
 
 ## Shipping
 
-`.github/workflows/testflight.yml` archives, exports and uploads to TestFlight for
-both platforms — the store record is one multiplatform listing. A `v*` tag uploads;
-a manual run uploads unless you untick the box.
-
-Six repository secrets are required; [`docs/TESTFLIGHT.md`](docs/TESTFLIGHT.md) lists
-them and how to produce them. The workflow overrides `project.yml`'s ad-hoc signing
-with the real team and automatic signing — do **not** change `project.yml` to fix a
-signing error, that breaks `make build` for everyone without a team.
+**Publishing is manual and CI does not do it.** Xcode, the team set on the *Stitch*
+target, **Product → Archive**, upload from the Organizer — see
+[`docs/TESTFLIGHT.md`](docs/TESTFLIGHT.md). Nothing Apple-related is stored in this
+repository, and `project.yml`'s ad-hoc signing must stay as it is: changing it to fix
+a signing error breaks `make build` for everyone without a team.
 
 Build number = workflow run number; `MARKETING_VERSION` is in `project.yml`.
 

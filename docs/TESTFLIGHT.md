@@ -1,75 +1,30 @@
-# TestFlight
+# Publishing
 
-[`.github/workflows/testflight.yml`](../.github/workflows/testflight.yml) archives
-Stitch for iOS and macOS, exports both, and uploads them to TestFlight. It runs on
-a GitHub `macos-26` runner: no machine of yours needs Xcode, a certificate, or an
-Apple ID signed in.
+**CI does not publish.** There is no workflow that uploads to App Store Connect,
+and no Apple credential is stored in this repository. Publishing is a manual step
+from a machine with Xcode and the developer account signed in; the commit-time
+workflow (`ci.yml`) only builds and tests.
 
-## How it is triggered
+Why: an upload needs a distribution identity, and an identity is a private key
+Apple hands out once per certificate. Every arrangement that puts one in CI
+either stores a long-lived secret (which has to be exported out of a keychain) or
+re-creates the certificate per run (which mails the account holder and
+invalidates profiles built on it). Neither is worth it for a handful of releases
+a year.
 
-| Trigger | What happens |
-| --- | --- |
-| Push a `v*` tag | archive, export and upload both platforms |
-| *Actions → TestFlight → Run workflow* | the same, unless you untick **upload** — unticked it archives and exports without sending anything, which is the cheap way to check signing |
+## How to ship
 
-`CFBundleVersion` becomes the workflow run number, so TestFlight never sees the
-same build number twice. `MARKETING_VERSION` is in `project.yml`; bump it there for
-a new version.
+__SHIP__
 
-## The four repository secrets
-
-| Secret | Contents |
-| --- | --- |
-| `APPLE_TEAM_ID` | `B592D69P29` |
-| `APP_CONNECT_KEY_ID` | the API key's 10-character ID |
-| `APP_CONNECT_ISSUER_ID` | the issuer UUID shown above the key list |
-| `APP_CONNECT_KEY_P8` | the whole `AuthKey_<id>.p8`, base64 encoded |
-
-No certificate is stored anywhere. The runner signs with the API key alone
-(`-allowProvisioningUpdates` plus `-authenticationKeyPath`), which is also why no
-developer machine has to exist: the certificate and the provisioning profile are
-resolved on the runner, per job.
+`project.yml` signs ad-hoc (`CODE_SIGN_IDENTITY: "-"`) so local builds need no
+team. Submission needs a real one:
 
 ```sh
-base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy     # paste into the secret
+xcodegen generate
 ```
 
-Until all four exist the workflow fails at *Check the signing secrets exist* and
-names the missing ones, on purpose: a deploy that cannot deploy should be red.
+Then in Xcode set the team on the *Stitch* target (*Signing & Capabilities →
+Automatically manage signing*), choose **Product → Archive**, and upload from the
+Organizer. `AppStore/ExportOptions.plist` is the export setting to use.
 
-## Signing, and why the workflow overrides `project.yml`
-
-`project.yml` signs ad-hoc (`CODE_SIGN_IDENTITY: "-"`, `CODE_SIGN_STYLE: Manual`) so
-that `make build` and `make run` work with no developer team. That is right for a
-Debug build and useless for the App Store. The workflow therefore overrides it on the
-command line:
-
-```
-DEVELOPMENT_TEAM=$APPLE_TEAM_ID CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Distribution"
-```
-
-together with `-allowProvisioningUpdates` and the API key, which lets Xcode create or
-refresh the provisioning profile it needs. Do not "fix" the workflow by editing
-`project.yml` to automatic signing: that would break the local, team-less build.
-
-## What it needs on Apple's side
-
-- An app record for `com.ondrejli.stitch`, platform iOS **and** macOS, in App Store
-  Connect. TestFlight rejects an upload with no record.
-- The **App Sandbox** capability enabled for the bundle ID — the entitlement is
-  already in [`Stitch/Resources/Stitch.entitlements`](../Stitch/Resources/Stitch.entitlements),
-  but a capability has to be switched on for the identifier as well.
-
-## Export options
-
-[`AppStore/ExportOptions.plist`](../AppStore/ExportOptions.plist) is committed:
-`method: app-store-connect`, `destination: export`, automatic signing for team
-`B592D69P29`, symbols uploaded, `manageAppVersionAndBuildNumber` off. For iOS this
-produces an `.ipa`, for macOS a `.pkg`; both are kept as workflow artifacts for 14
-days so a failed upload can be retried without a rebuild.
-
-## After the upload
-
-App Store Connect processes the build for a few minutes before testers see it. The
-first build of a version also needs the compliance answers — `ITSAppUsesNonExemptEncryption`
-is already `false` in `project.yml`, so that is not one of them.
+Local `make build` / `make run` keep working because they never ask for a team.
